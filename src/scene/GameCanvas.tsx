@@ -18,6 +18,7 @@ export function GameCanvas() {
       onCreated={({ gl }) => {
         gl.toneMapping = THREE.ACESFilmicToneMapping;
         gl.toneMappingExposure = 1.12;
+        (window as unknown as { __summitGL: THREE.WebGLRenderer }).__summitGL = gl;
       }}
     >
       <AdaptiveDpr pixelated />
