@@ -22,6 +22,8 @@ export interface ExpeditionRecord {
   gems: { green: number; red: number; total: number };
   /** v0.3+ */
   score?: number;
+  /** scoring model the score was computed with (v0.4+: 2) */
+  scoreVersion?: number;
   registerSigned?: boolean;
 }
 

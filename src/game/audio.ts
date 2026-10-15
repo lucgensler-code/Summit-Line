@@ -82,3 +82,43 @@ export function footstep(kind: 'soft' | 'gravel' | 'snow', strength = 1) {
   src.connect(f).connect(g).connect(master);
   src.start(t, Math.random() * 0.1, 0.2);
 }
+
+/** Short synthesized cues (no audio files): gem pickups, summit, warnings. Kept quiet and soft. */
+export function cue(kind: 'green' | 'red' | 'summit' | 'warn') {
+  if (!ctx || !master || muted) return;
+  const t0 = ctx.currentTime;
+  const notes: [number, number, number][] =
+    kind === 'green'
+      ? [
+          [659.3, 0, 0.35],
+          [987.8, 0.09, 0.45],
+        ]
+      : kind === 'red'
+        ? [
+            [440, 0, 0.25],
+            [554.4, 0.06, 0.25],
+            [880, 0.12, 0.4],
+          ]
+        : kind === 'summit'
+          ? [
+              [392, 0, 1.6],
+              [493.9, 0.12, 1.6],
+              [587.3, 0.24, 1.7],
+              [784, 0.4, 1.9],
+            ]
+          : [[330, 0, 0.18]];
+  const peak = kind === 'summit' ? 0.05 : kind === 'warn' ? 0.035 : 0.045;
+  for (const [freq, at, len] of notes) {
+    const o = ctx.createOscillator();
+    o.type = kind === 'warn' ? 'triangle' : 'sine';
+    o.frequency.value = freq;
+    const g = ctx.createGain();
+    const t = t0 + at;
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(peak, t + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.0008, t + len);
+    o.connect(g).connect(master);
+    o.start(t);
+    o.stop(t + len + 0.05);
+  }
+}

@@ -47,16 +47,17 @@ export const BASE_PACK_KG = 6.5;
 export const WATER_PER_DRINK = 0.5;
 export const FOOD_KG = 0.25;
 /** Game seconds per real second. */
-export const TIME_SCALE = 30;
+/** Game seconds per real second: a typical ~6.5 min climb ≈ 6.5 h on the expedition clock. */
+export const TIME_SCALE = 55;
 /** Resting is a time-skip: the expedition clock runs this much faster while you sit. */
 export const REST_TIME_MULT = 4;
 
-export const WALK_SPEED = 5.2;
-export const JOG_SPEED = 9.1;
+export const WALK_SPEED = 6.4;
+export const JOG_SPEED = 12.4;
 export const JUMP_VELOCITY = 5.2;
 export const GRAVITY = 16;
 export const GEM_RADIUS = 1.7;
-export const SPEED_BOOST = { mult: 1.4, seconds: 12 };
+export const SPEED_BOOST = { mult: 1.5, seconds: 15 };
 export const GREEN_GEM_FRACTION = 0.35;
 /** Drinking restores this share of the energy cap as current stamina. */
 export const DRINK_STAMINA = 0.18;
@@ -393,24 +394,25 @@ export function stepPlayer(p: PlayerState, l: Loadout, intent: MoveIntent, dt: n
   const elevFt = elevationFt(p.y);
   let effort = 0;
   if (moving) {
-    effort += wantsJog ? 3.0 * lerp(1.5, 1, hyd) : 0.45;
+    effort += wantsJog ? 2.1 * lerp(1.5, 1, hyd) : 0.45;
     const up = Math.max(grade, 0);
-    effort += up * (wantsJog ? 10 : 6.2) * (l.poles ? 0.85 : 1);
+    effort += up * (wantsJog ? 7.5 : 6.2) * (l.poles ? 0.85 : 1);
     if (grade < -0.4) effort += (-grade - 0.4) * 2.5 * (l.poles ? 0.7 : 1);
     effort += SURFACE_EFFORT[p.surface] * (p.onTrail ? 0 : 1);
     if (p.surface === 'snow') effort += lerp(1.2, 2.6, soft) * (l.spikes ? 0.75 : 1);
     else if (deepSnow) effort += lerp(0.2, 0.7, soft) * (l.spikes ? 0.6 : 1);
     effort *= 1 + Math.max(0, kg - 8) * 0.035;
     if (elevFt > 9000) effort *= 1.15; // thin air
-    if (boosted) effort *= 0.75; // a red gem makes the effort feel lighter, not free
+    if (boosted) effort *= 0.55; // a red gem makes the effort feel lighter, not free
   }
   const cold = (elevFt > 9000 || hour < 7) && !l.insulated;
   if (cold) effort += 0.35;
 
   let recover = 0;
-  if (p.resting) recover = 13;
-  else if (!moving) recover = 6;
-  else if (!wantsJog) recover = 1.6 * (1 - Math.max(grade, 0) * 1.2);
+  // v0.4: passive and resting recovery both +20%.
+  if (p.resting) recover = 15.6;
+  else if (!moving) recover = 7.2;
+  else if (!wantsJog) recover = 1.92 * (1 - Math.max(grade, 0) * 1.2);
   recover *= lerp(0.45, 1, hyd);
   if (cold) recover *= 0.8;
   p.limiter =
@@ -434,7 +436,7 @@ export function stepPlayer(p: PlayerState, l: Loadout, intent: MoveIntent, dt: n
   p.maxStamina = clamp(p.maxStamina - dt * drain, 30, 100);
   // Hydration
   const heat = 1 + 0.4 * smoothstep(10, 14, hour) * (elevFt < 9500 ? 1 : 0.5);
-  p.hydration = clamp(p.hydration - dt * (0.09 + effort * 0.032) * heat, 0, 100);
+  p.hydration = clamp(p.hydration - dt * (0.09 + effort * 0.022) * heat, 0, 100);
 
   // ---- activity for animation
   if (p.resting) p.activity = 'rest';

@@ -2129,3 +2129,505 @@ kbd {
 .summary-card {
   max-height: min(50vh, 460px);
 }
+
+/* iOS Safari applies an ancestor's user-select:none to text fields, which breaks typing. */
+input,
+textarea {
+  -webkit-user-select: text;
+  user-select: text;
+  touch-action: manipulation;
+}
+
+.fps-overlay {
+  position: absolute;
+  left: 50%;
+  bottom: calc(var(--safe-b) + 4px);
+  transform: translateX(-50%);
+  z-index: 60;
+  font: 600 11px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.7);
+  color: #9be27f;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+/* ================================================================== v0.4 summit flow */
+.result-card {
+  pointer-events: auto;
+  margin: auto;
+  width: min(400px, 100%);
+  padding: 16px 18px 14px;
+  border-radius: 16px;
+  background: var(--glass-strong);
+  border: 1px solid rgba(240, 163, 94, 0.55);
+  box-shadow: 0 0 40px rgba(240, 163, 94, 0.22);
+  animation: achieve 0.8s cubic-bezier(0.2, 1.3, 0.4, 1) both;
+}
+.result-k {
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--accent);
+  font-weight: 750;
+}
+.result-main {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin: 8px 0 4px;
+}
+.result-main > div {
+  display: flex;
+  flex-direction: column;
+}
+.result-main b {
+  font-size: 32px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+.result-sub {
+  margin: 0 0 12px;
+  font-size: 12.5px;
+  color: var(--ink-dim);
+}
+.result-card .hs-entry {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+}
+.result-card .skip {
+  align-self: center;
+  min-height: 36px;
+  font-size: 12.5px;
+}
+.cine-controls {
+  pointer-events: none;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+}
+.cine-controls .pill-btn {
+  order: 0;
+}
+.cine-controls .achievement {
+  animation: achieve 0.9s cubic-bezier(0.2, 1.4, 0.4, 1) both;
+}
+.hs-done.dim {
+  color: var(--ink-dim);
+}
+.pb-tag.old {
+  background: rgba(255, 255, 255, 0.14);
+  color: var(--ink-dim);
+}
+
+/* ================================================================== v0.4 HUD (slim, horizontal) */
+.ico {
+  flex: none;
+  vertical-align: -2px;
+}
+.hud {
+  font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+}
+.panel {
+  background: rgba(12, 16, 22, 0.72);
+  border-color: rgba(255, 255, 255, 0.14);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+/* ---- nav: minimap | place · elevation · trail status */
+.nav {
+  grid-template-columns: 72px minmax(0, auto);
+  grid-template-rows: auto auto;
+  column-gap: 10px;
+  row-gap: 5px;
+  padding: 6px 12px 6px 6px;
+  max-width: 300px;
+  transition: border-color 0.3s, box-shadow 0.3s;
+}
+.nav .progress {
+  grid-column: 1 / 3;
+  margin: 0 0 0 2px;
+  height: 3px;
+}
+.nav .place {
+  font-size: 10.5px;
+  font-weight: 750;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #ffd2a1;
+  white-space: nowrap;
+}
+.nav .elev {
+  font-size: 22px;
+  white-space: nowrap;
+}
+.nav .elev em {
+  font-style: normal;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0;
+  margin-left: 7px;
+  color: var(--ink-dim);
+}
+.trail-chip {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0 5px;
+  font-size: 11.5px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+.trail-chip > i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: none;
+}
+.trail-chip.on {
+  color: #8fe6a6;
+}
+.trail-chip.on > i {
+  background: #4fd27a;
+  box-shadow: 0 0 6px #4fd27a;
+}
+.trail-chip.near {
+  color: #ffd86a;
+}
+.trail-chip.near > i {
+  background: #ffc93a;
+}
+.trail-chip.off {
+  color: #ff8a7a;
+}
+.trail-chip.off > i {
+  background: #ff5a48;
+  animation: blink 1s ease-in-out infinite alternate;
+}
+.trail-chip .guide {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-weight: 650;
+  color: var(--ink);
+}
+.trail-chip .ico.arrow {
+  transition: transform 0.25s;
+}
+@keyframes blink {
+  to {
+    opacity: 0.35;
+  }
+}
+.nav.trail-near {
+  border-color: rgba(255, 201, 58, 0.55);
+}
+.nav.trail-off {
+  border-color: rgba(255, 90, 72, 0.75);
+  box-shadow: 0 0 0 1px rgba(255, 90, 72, 0.35), 0 4px 18px rgba(0, 0, 0, 0.3);
+}
+
+/* ---- status (top-right): expedition clock + real time, icons, quiet conditions line */
+.status {
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 3px;
+}
+.status-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.status .clock {
+  gap: 10px;
+  min-height: 38px;
+  padding: 0 12px;
+}
+.sim-time {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 15px;
+  font-weight: 760;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.sim-time .ff {
+  font-style: normal;
+  font-size: 10px;
+  color: var(--accent);
+}
+.real-time {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding-left: 10px;
+  border-left: 1px solid rgba(255, 255, 255, 0.18);
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--ink-dim);
+  font-variant-numeric: tabular-nums;
+}
+.hud-icon {
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(12, 16, 22, 0.72);
+  color: var(--ink);
+  cursor: pointer;
+}
+.hud-icon:hover {
+  background: rgba(30, 36, 46, 0.85);
+}
+.conditions {
+  font-size: 11px;
+  font-weight: 600;
+  color: rgba(240, 236, 228, 0.78);
+  padding-right: 4px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.status-details {
+  top: auto;
+  position: relative;
+  margin-top: 4px;
+}
+
+/* ---- single message slot, top centre */
+.hud-messages {
+  top: calc(var(--safe-t) + 10px);
+  width: min(380px, calc(100% - 2 * 320px));
+  min-width: 220px;
+  gap: 6px;
+}
+.hud-messages .notice,
+.hud-messages .objective {
+  max-width: 100%;
+  padding: 6px 13px;
+  border-radius: 999px;
+  background: rgba(12, 16, 22, 0.82);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  font-size: 12.5px;
+  line-height: 1.35;
+  text-align: center;
+}
+.hud-messages .objective {
+  font-weight: 600;
+  color: rgba(240, 236, 228, 0.82);
+  background: rgba(12, 16, 22, 0.55);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.notice.good {
+  border-color: rgba(143, 209, 158, 0.6);
+}
+.notice.warn {
+  border-color: rgba(255, 196, 90, 0.7);
+}
+.notice.calm {
+  font-weight: 600;
+  color: #ffe2a8;
+}
+.notice.calm::before {
+  background: #ffd27a;
+}
+
+/* ---- vitals + supplies (bottom-left) */
+.vitals {
+  width: 252px;
+  padding: 8px 10px;
+  gap: 5px;
+}
+.vital-row {
+  grid-template-columns: 16px 1fr 24px;
+}
+.vlabel {
+  display: grid;
+  place-items: center;
+}
+.vlabel.stamina {
+  color: #a6ee86;
+}
+.vlabel.hydration {
+  color: #7fd4ff;
+}
+.bar {
+  height: 9px;
+}
+.supply-btn {
+  gap: 5px;
+  min-height: 34px;
+}
+.supply-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.boost-chip {
+  gap: 6px;
+}
+.keys-hint {
+  background: rgba(12, 16, 22, 0.62);
+  color: rgba(255, 255, 255, 0.86);
+}
+
+/* ---- sign / kiosk dialog */
+.modal.sign {
+  width: min(460px, 100%);
+  background: #2e2114;
+  border-color: rgba(240, 210, 160, 0.4);
+  color: #fbf1df;
+}
+.modal.sign h2 {
+  color: #ffd99a;
+  margin: 2px 0 8px;
+}
+.modal.sign p {
+  font-size: 14px;
+  line-height: 1.5;
+  margin: 0 0 6px;
+}
+.modal.sign .btn {
+  margin-top: 10px;
+  width: 100%;
+}
+.sign-k {
+  font-size: 10.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(251, 241, 223, 0.6);
+  font-weight: 700;
+}
+
+/* phones, portrait */
+@media (max-width: 640px) {
+  .nav {
+    max-width: 62vw;
+    grid-template-columns: 60px minmax(0, auto);
+    padding: 5px 9px 5px 5px;
+    column-gap: 8px;
+  }
+  .nav .minimap {
+    width: 60px !important;
+    height: 60px !important;
+  }
+  .nav .elev {
+    font-size: 19px;
+  }
+  .nav .elev em {
+    display: none;
+  }
+  .trail-chip {
+    font-size: 11px;
+  }
+  .status .clock {
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0;
+    padding: 4px 10px;
+  }
+  .real-time {
+    border-left: none;
+    padding-left: 0;
+    font-size: 11px;
+  }
+  .status-row {
+    align-items: flex-start;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    max-width: 38vw;
+  }
+  .hud-icon {
+    width: 36px;
+    height: 36px;
+  }
+  .conditions {
+    display: none;
+  }
+  .hud-messages {
+    top: calc(var(--safe-t) + 104px);
+    width: calc(100% - 24px);
+    min-width: 0;
+  }
+  .vitals {
+    width: auto;
+  }
+}
+/* phones, landscape: tighter top bar */
+@media (orientation: landscape) and (max-height: 520px) {
+  .nav {
+    grid-template-columns: 56px minmax(0, auto);
+    padding: 4px 9px 4px 4px;
+  }
+  .nav .minimap {
+    width: 56px !important;
+    height: 56px !important;
+  }
+  .nav .elev {
+    font-size: 18px;
+  }
+  .conditions {
+    display: none;
+  }
+  .hud-messages {
+    width: min(320px, 40vw);
+    min-width: 0;
+  }
+  .hud-messages .objective {
+    display: none;
+  }
+  .vitals {
+    width: 236px;
+  }
+}
+.supplies-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 5px;
+}
+.supply-btn {
+  min-width: 0;
+  padding: 0 5px;
+}
+.supply-btn kbd {
+  font-size: 9.5px;
+  padding: 1px 3px;
+}
+@media (max-width: 640px) {
+  .hud-top {
+    flex-wrap: nowrap;
+  }
+  .nav {
+    max-width: none;
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+  .status {
+    flex: none;
+  }
+  .status-row {
+    display: grid;
+    grid-template-columns: 36px 36px;
+    gap: 5px;
+    max-width: none;
+  }
+  .status-row .clock {
+    grid-column: 1 / 3;
+    order: -1;
+    align-items: center;
+  }
+  .hud-messages {
+    top: calc(var(--safe-t) + 112px);
+  }
+}

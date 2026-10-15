@@ -179,7 +179,7 @@ export function PrepScreen() {
             <span>→</span>
           </button>
         </div>
-        <p className="controls-hint">WASD move · Shift jog · Space jump/act · Drag look · Scroll zoom · M map · E eat · Q drink · R rest</p>
+        <p className="controls-hint">WASD move · Arrows look · Shift run · Space act/rest/jump · C recenter · +/− zoom · M map · E eat · Q drink · R rest</p>
       </div>
     </div>
   );

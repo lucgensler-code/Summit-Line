@@ -99,14 +99,25 @@ await page.keyboard.up('KeyW');
 await page.waitForTimeout(300);
 console.log('at summit', await state());
 await page.keyboard.press('Space');
-await page.waitForTimeout(5500);
-await shot('10-summit');
+await page.waitForTimeout(2500);
+await shot('10-summit-result');
 console.log('after summit', await state());
-const summary = await page.$('.summary-card');
-console.log('summary card visible:', !!summary);
-
-if (summary) {
-  await page.click('.summary-card .btn.primary');
+// v0.4 flow: result card → name (typing must keep focus and spaces) → cinematic → details.
+const result = await page.$('.result-card');
+console.log('result card visible:', !!result);
+if (result) {
+  await page.fill('#hs-name', '');
+  await page.type('#hs-name', 'a b', { delay: 40 });
+  console.log('typed name:', JSON.stringify(await page.inputValue('#hs-name')));
+  await page.click('.result-card .skip');
+  await page.waitForTimeout(1500);
+  await shot('11-cinematic');
+  await page.click('.cine-controls .pill-btn');
+  await page.waitForTimeout(1500);
+  await shot('12-details');
+  const summary = await page.$('.summary-card');
+  console.log('summary card visible:', !!summary);
+  await page.click('.sum-actions .btn.primary');
   await page.waitForTimeout(1200);
   console.log('restarted', await state());
 }

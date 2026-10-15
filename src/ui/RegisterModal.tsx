@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { cleanName, loadPlayerName, savePlayerName } from '../game/leaderboard';
+import { cleanName, loadPlayerName, savePlayerName, typingName } from '../game/leaderboard';
 import { ACTIVE_MOUNTAIN, ACTIVE_ROUTE } from '../game/routes';
 import { SCORE_RULES } from '../game/scoring';
 import { clockHour } from '../game/sim';
@@ -80,7 +80,7 @@ export function RegisterModal() {
         >
           <label htmlFor="reg-name">Name or initials</label>
           <div className="reg-row">
-            <input id="reg-name" value={name} maxLength={12} autoComplete="nickname" onChange={(e) => setName(cleanName(e.target.value))} placeholder="e.g. LUC" />
+            <input id="reg-name" value={name} maxLength={12} autoComplete="nickname" onChange={(e) => setName(typingName(e.target.value))} placeholder="e.g. LUC" />
             <button type="submit" className="btn primary">
               Sign
             </button>

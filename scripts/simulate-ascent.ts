@@ -1,3 +1,4 @@
+import { computeScore } from '../src/game/scoring';
 // Headless playtest: drives the real gameplay simulation with simple bots to verify the summit is
 // reachable on foot and that route choice / loadout materially change the outcome.
 // Run with: npm run test:sim
@@ -15,7 +16,7 @@ import {
   type Loadout,
 } from '../src/game/sim';
 
-type Strategy = 'trail' | 'direct' | 'gems' | 'smart';
+type Strategy = 'trail' | 'direct' | 'gems' | 'smart' | 'expert';
 
 function run(name: string, strategy: Strategy, loadout: Loadout, jog = false) {
   const W = getWorld();
@@ -35,7 +36,7 @@ function run(name: string, strategy: Strategy, loadout: Loadout, jog = false) {
   while (p.realTime < 60 * 60) {
     if (nearSummit(p)) break;
     // housekeeping
-    if (strategy === 'smart') {
+    if (strategy === 'smart' || strategy === 'expert') {
       // Efficient player: eat/drink on the move before trouble, never stop if avoidable.
       if (p.maxStamina < 72 && p.food > 0) eat(p);
       if ((p.hydration < 60 || p.stamina < 30) && p.water > 0 && p.realTime - lastDrink > 6) {
@@ -56,8 +57,8 @@ function run(name: string, strategy: Strategy, loadout: Loadout, jog = false) {
     }
     let tx: number;
     let tz: number;
-    const gemR = strategy === 'smart' ? 14 : 130;
-    const gem = strategy === 'gems' || strategy === 'smart' ? W.gems.find((g) => !p.gems[g.id] && Math.hypot(g.x - p.x, g.z - p.z) < gemR) : undefined;
+    const gemR = strategy === 'expert' ? 30 : strategy === 'smart' ? 16 : 130;
+    const gem = strategy === 'expert' && !process.env.EXPERT_GEMS ? W.gems.find((g) => !p.gems[g.id] && g.kind === 'red' && Math.hypot(g.x - p.x, g.z - p.z) < 16) : strategy === 'gems' || strategy === 'smart' || strategy === 'expert' ? W.gems.find((g) => !p.gems[g.id] && Math.hypot(g.x - p.x, g.z - p.z) < gemR) : undefined;
     if (gem) {
       tx = gem.x;
       tz = gem.z;
@@ -66,11 +67,17 @@ function run(name: string, strategy: Strategy, loadout: Loadout, jog = false) {
       for (let k = idx; k < Math.min(idx + 120, W.main.pts.length); k++)
         if (Math.hypot(W.main.pts[k].x - gem.x, W.main.pts[k].z - gem.z) < Math.hypot(W.main.pts[best].x - gem.x, W.main.pts[best].z - gem.z)) best = k;
       idx = Math.max(idx, best);
-    } else if (strategy === 'trail' || strategy === 'gems' || strategy === 'smart') {
+    } else if (strategy === 'trail' || strategy === 'gems' || strategy === 'smart' || strategy === 'expert') {
       const pts = W.main.pts;
       while (idx < pts.length - 1 && Math.hypot(pts[idx].x - p.x, pts[idx].z - p.z) < 3.5) idx++;
-      tx = pts[idx].x;
-      tz = pts[idx].z;
+      // Expert: while boosted, cut across switchbacks toward a point further up the route.
+      let ti = idx;
+      if (strategy === 'expert' && p.realTime < p.boostUntil && process.env.CUT) {
+        for (let k = idx; k < Math.min(idx + 70, pts.length); k++) if (Math.hypot(pts[k].x - p.x, pts[k].z - p.z) < 26) ti = k;
+        if (ti > idx) idx = ti;
+      }
+      tx = pts[ti].x;
+      tz = pts[ti].z;
     } else {
       // beeline at the crater rim then follow rim
       const cpRim = W.checkpoints.find((c) => c.id === 'rim')!;
@@ -85,7 +92,9 @@ function run(name: string, strategy: Strategy, loadout: Loadout, jog = false) {
     const dx = tx - p.x;
     const dz = tz - p.z;
     const d = Math.hypot(dx, dz) || 1;
-    const smartJog = strategy === 'smart' && p.stamina > 35 && (p.grade < 0.12 || p.realTime < p.boostUntil);
+    const smartJog =
+      (strategy === 'smart' && p.stamina > 35 && (p.grade < 0.12 || p.realTime < p.boostUntil)) ||
+      (strategy === 'expert' && ((p.stamina > 40 && p.grade < 0.16) || (p.stamina > 15 && p.realTime < p.boostUntil)));
     stepPlayer(p, loadout, { x: dx / d, z: dz / d, jog: smartJog || (jog && p.stamina > 40) }, dt, emit);
     if (p.exhausted) exhaustions++;
     stuckTimer += dt;
@@ -106,6 +115,8 @@ function run(name: string, strategy: Strategy, loadout: Loadout, jog = false) {
       `hyd ${p.hydration.toFixed(0)}  water ${p.water.toFixed(1)}  food ${p.food}  ` +
       `onTrail ${((p.timeOnTrail / Math.max(p.timeMoving, 1)) * 100).toFixed(0)}%  gems ${p.gemCounts.green}g/${p.gemCounts.red}r  exh ${p.exhaustions}  gain ${Math.round(p.elevGain * W.ftPerUnit)}ft`,
   );
+  const sc = computeScore({ realSeconds: p.realTime, exhaustions: p.exhaustions, gems: p.gemCounts.green + p.gemCounts.red, gemsAvailable: W.gems.length, registerSigned: false });
+  console.log(`    score v${sc.version}: ${sc.total} (${sc.lines.map((l) => `${l.id} ${l.points}`).join(', ')})`);
   console.log('   ', events.join(', '));
   return ok;
 }
@@ -121,6 +132,7 @@ const results = [
   run('direct off-trail', 'direct', DEFAULT_LOADOUT),
   run('trail + gem hunting', 'gems', DEFAULT_LOADOUT, true),
   run('efficient player', 'smart', DEFAULT_LOADOUT),
+  run('expert (runs, red boosts)', 'expert', { ...DEFAULT_LOADOUT, waterL: 2, food: 3 }),
 ];
 if (!results[0]) {
   console.error('Default trail ascent failed to reach the summit');

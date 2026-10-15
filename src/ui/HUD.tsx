@@ -1,7 +1,11 @@
 import { useEffect, useState } from 'react';
-import { queueAction } from '../game/input';
+import { input, keysSwapped, queueAction } from '../game/input';
 import { useGame } from '../game/store';
-import { elevUnit, elevValue, fmtDistance, fmtTemp, fmtWaterShort, fmtWeight, fmtWind } from '../game/units';
+import { elevUnit, elevValue, fmtDistance, fmtShortDistance, fmtTemp, fmtWaterShort, fmtWeight, fmtWind } from '../game/units';
+import { fmtReal } from './ExpeditionLog';
+import { IconArrow, IconBar, IconBolt, IconBottle, IconClock, IconDrop, IconRecenter, IconRest, IconTimer } from './icons';
+import { Modal } from './Modal';
+import { isTouchDevice } from './TouchControls';
 import { fmtClock, fmtDuration } from './format';
 import { MiniMap } from './MiniMap';
 import { useUnits } from './useUnits';
@@ -28,12 +32,13 @@ function useFlash(at: number | undefined, ms = 900) {
   return on;
 }
 
+const TRAIL_LABEL = { on: 'On trail', near: 'Near trail', off: 'Off route' } as const;
+
 export function HUD() {
   useUnits();
   const hud = useGame((s) => s.hud);
   const notice = useGame((s) => s.notice);
   const reading = useGame((s) => s.reading);
-  const setReading = useGame((s) => s.setReading);
   const phase = useGame((s) => s.phase);
   const gemFlash = useGame((s) => s.gemFlash);
   const showHint = useGame((s) => s.showHint);
@@ -44,16 +49,17 @@ export function HUD() {
   if (!hud) return null;
   const staminaLow = hud.stamina < 25;
   const deg = ((hud.heading * 180) / Math.PI + 360) % 360;
+  // One notification slot: queued notices first, then persistent conditions.
   const status = notice ? (
-    <em key={notice.id} className={`notice ${notice.tone}`}>
+    <div key={notice.id} className={`notice ${notice.tone}`} role="status">
       {notice.text}
-    </em>
+    </div>
   ) : hud.exhausted ? (
-    <em className="notice warn">Exhausted · drink, eat or rest</em>
-  ) : hud.limiter ? (
-    <em className="limiter">{hud.limiter}</em>
+    <div className="notice warn">Exhausted · drink, eat or rest</div>
   ) : hud.resting ? (
-    <em className="limiter">Resting · clock ×4</em>
+    <div className="notice calm">Resting · clock ×4</div>
+  ) : hud.limiter ? (
+    <div className="notice calm">{hud.limiter}</div>
   ) : null;
 
   return (
@@ -65,48 +71,66 @@ export function HUD() {
       {hud.boostLeft > 0 && <div className="boost-edge" />}
 
       <div className="hud-top">
-        {/* Navigation: mini-map + compass + elevation + distance + progress + objective */}
-        <button type="button" className="panel nav" onClick={() => setMapOpen(true)} aria-label="Navigation — open the full map">
-          <MiniMap size={78} />
+        {/* Primary: minimap + where am I + elevation + trail status */}
+        <button type="button" className={`panel nav trail-${hud.trailState}`} onClick={() => setMapOpen(true)} aria-label="Navigation — open the full map (M)">
+          <MiniMap size={72} />
           <span className="nav-text">
+            <span className="place">{hud.place}</span>
             <span className="elev">
               {elevValue(hud.elevFt)}
               <small>{elevUnit()}</small>
+              <em>{fmtDistance(hud.remainMi)} to go</em>
             </span>
-            <span className="togo">{fmtDistance(hud.remainMi)} to summit</span>
-            <span className="heading">
-              {CARDINALS[Math.round(deg / 45) % 8]} {Math.round(deg)}°
-            </span>
-            <span className="progress" aria-label={`${Math.round(hud.progress * 100)}% of route`}>
-              <i style={{ width: `${Math.max(2, hud.progress * 100)}%` }} />
+            <span className={`trail-chip ${hud.trailState}`}>
+              <i />
+              {TRAIL_LABEL[hud.trailState]}
+              {hud.guide && hud.trailState !== 'on' && (
+                <span className="guide">
+                  · trail {fmtShortDistance(hud.guide.distFt)} <IconArrow deg={hud.guide.rel} /> {hud.guide.card}
+                </span>
+              )}
             </span>
           </span>
-          <span className="objective">{hud.objective}</span>
+          <span className="progress" aria-label={`${Math.round(hud.progress * 100)}% of route`}>
+            <i style={{ width: `${Math.max(2, hud.progress * 100)}%` }} />
+          </span>
         </button>
 
         <div className="status">
-          <button type="button" className="panel clock" onClick={() => setDetails((d) => !d)} aria-expanded={details} aria-label="Expedition time and conditions">
-            <span className="time">
-              {fmtClock(hud.clock)}
-              {hud.resting && <em className="ff"> ▸▸</em>}
-            </span>
-            <i className={`trail-dot ${hud.onTrail ? 'on' : 'off'}`} title={hud.onTrail ? 'On trail' : 'Off trail'} />
-          </button>
-          <button type="button" className="pause-btn" onClick={pause} aria-label="Pause (Esc)" title="Pause (Esc)">
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M8 6h3v12H8zM13 6h3v12h-3z" fill="currentColor" />
-            </svg>
-          </button>
+          <div className="status-row">
+            <button type="button" className="panel clock" onClick={() => setDetails((d) => !d)} aria-expanded={details} aria-label="Expedition clock, real time and conditions">
+              <span className="sim-time" title="Expedition clock (simulated)">
+                <IconClock size={13} />
+                {fmtClock(hud.clock)}
+                {hud.resting && <em className="ff">×4</em>}
+              </span>
+              <span className="real-time" title="Real time played">
+                <IconTimer size={12} />
+                {fmtReal(hud.realSeconds)}
+              </span>
+            </button>
+            <button type="button" className="hud-icon" onClick={() => (input.recenter = true)} aria-label="Recenter camera (C)" title="Recenter camera (C)">
+              <IconRecenter size={18} />
+            </button>
+            <button type="button" className="hud-icon" onClick={pause} aria-label="Pause (Esc)" title="Pause (Esc)">
+              <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+                <path d="M7 5h3.5v14H7zM13.5 5H17v14h-3.5z" fill="currentColor" />
+              </svg>
+            </button>
+          </div>
+          <div className="conditions">
+            {CARDINALS[Math.round(deg / 45) % 8]} {Math.round(deg)}° · {fmtTemp(hud.tempF)} · {fmtWind(hud.windMph)}
+          </div>
           {details && (
             <div className="panel status-details">
-              <span>Elapsed</span>
+              <span>Expedition time</span>
               <b>{fmtDuration(hud.elapsed / 3600)}</b>
+              <span>Real time</span>
+              <b>{fmtReal(hud.realSeconds)}</b>
               <span>Terrain</span>
               <b>{hud.postholing ? 'Deep snow' : hud.onTrail ? (hud.surface === 'Trail' ? 'On trail' : 'Boot track') : `Off trail · ${hud.surface}`}</b>
               <span>Weather</span>
-              <b>
-                {fmtTemp(hud.tempF)} · {fmtWind(hud.windMph)}
-              </b>
+              <b>{hud.weather}</b>
               {hud.snowSoft > 0.3 && (
                 <>
                   <span>Snow</span>
@@ -124,50 +148,57 @@ export function HUD() {
         </div>
       </div>
 
-      {(showHint || reading) && (
-        <div className="hud-messages">
-          {showHint && <div className="hint">Drag to look around · Pinch to zoom</div>}
-          {reading && (
-            <button type="button" className="reading" onClick={() => setReading(null)} aria-label="Close sign">
-              <h3>{reading.title}</h3>
-              {reading.text.split('\n').map((l, i) => (
-                <p key={i}>{l}</p>
-              ))}
-            </button>
-          )}
-        </div>
-      )}
+      <div className="hud-messages">
+        {status}
+        {!status && <div className="objective">{hud.objective}</div>}
+        {showHint && !reading && <div className="hint">{isTouchDevice() ? 'Drag to look around · Pinch to zoom' : 'Arrow keys or drag to look · Scroll or +/− to zoom'}</div>}
+      </div>
 
       <div className="hud-bottom">
         <div className={`panel vitals ${greenFlash ? 'flash-green' : ''}`}>
-          <div className="vstatus" aria-live="polite">
-            {status}
-          </div>
-          <div className="vital-row">
-            <span className="vlabel" aria-hidden="true">
-              ⚡
+          <div className="vital-row" title="Stamina — the striped end is energy you've burned; eat to restore it">
+            <span className="vlabel stamina">
+              <IconBolt size={14} />
             </span>
             <Bar value={hud.stamina} cap={hud.maxStamina} cls={`stamina ${staminaLow ? 'low' : ''}`} label="Stamina" />
             <span className="vnum">{Math.round(hud.stamina)}</span>
           </div>
-          <div className="vital-row">
-            <span className="vlabel" aria-hidden="true">
-              💧
+          <div className="vital-row" title="Hydration — low hydration slows stamina recovery">
+            <span className="vlabel hydration">
+              <IconDrop size={14} />
             </span>
             <Bar value={hud.hydration} cls={`hydration ${hud.hydration < 35 ? 'low' : ''}`} label="Hydration" />
             <span className="vnum">{Math.round(hud.hydration)}</span>
           </div>
           <div className="supplies-row">
-            <button type="button" className={`supply-btn ${hud.consumeKind === 'drink' ? 'using' : ''}`} onClick={() => queueAction('drink')} aria-label="Drink water (Q)">
-              💧 {fmtWaterShort(hud.water)}
+            <button
+              type="button"
+              className={`supply-btn ${hud.consumeKind === 'drink' ? 'using' : ''}`}
+              onClick={() => queueAction('drink')}
+              disabled={hud.water <= 0.01}
+              aria-label={`Drink water, ${fmtWaterShort(hud.water)} left (Q)`}
+              title="Drink: +hydration and a little stamina (Q)"
+            >
+              <IconBottle size={15} />
+              <span>{fmtWaterShort(hud.water)}</span>
               <kbd>Q</kbd>
             </button>
-            <button type="button" className={`supply-btn ${hud.consumeKind === 'eat' ? 'using' : ''}`} onClick={() => queueAction('eat')} aria-label={`Eat a trail bar, ${hud.food} left (E)`}>
-              🍫 {hud.food}
+            <button
+              type="button"
+              className={`supply-btn ${hud.consumeKind === 'eat' ? 'using' : ''}`}
+              onClick={() => queueAction('eat')}
+              disabled={hud.food <= 0}
+              aria-label={`Eat a trail bar, ${hud.food} left (E)`}
+              title="Eat: restores burned energy (striped bar) and some stamina (E)"
+            >
+              <IconBar size={15} />
+              <span>×{hud.food}</span>
               <kbd>E</kbd>
             </button>
-            <button type="button" className={`supply-btn ${hud.resting ? 'active' : ''}`} onClick={() => queueAction('rest')} aria-label="Rest (R)">
-              ⛺ Rest<kbd>R</kbd>
+            <button type="button" className={`supply-btn ${hud.resting ? 'active' : ''}`} onClick={() => queueAction('rest')} aria-label="Rest (R)" title="Rest: fast stamina recovery, clock runs ×4 (R)">
+              <IconRest size={15} />
+              <span>Rest</span>
+              <kbd>R</kbd>
             </button>
           </div>
         </div>
@@ -180,7 +211,8 @@ export function HUD() {
           )}
           {hud.boostLeft > 0 && (
             <div className="boost-chip">
-              <span>⚡ Speed boost</span>
+              <IconBolt size={13} />
+              <span>Speed boost</span>
               <b>{Math.ceil(hud.boostLeft)}s</b>
             </div>
           )}
@@ -188,13 +220,33 @@ export function HUD() {
 
         <div className="keys-hint desktop-only">
           <span>
-            <kbd>WASD</kbd> move <kbd>Shift</kbd> jog <kbd>Space</kbd> jump/act
+            <kbd>{keysSwapped() ? '↑←↓→' : 'WASD'}</kbd> move <kbd>Shift</kbd> run <kbd>Space</kbd> act/rest/jump
           </span>
           <span>
-            <kbd>E</kbd> eat <kbd>Q</kbd> drink <kbd>R</kbd> rest <kbd>M</kbd> map
+            <kbd>{keysSwapped() ? 'WASD' : '↑←↓→'}</kbd> camera <kbd>+ −</kbd> zoom <kbd>C</kbd> recenter <kbd>M</kbd> map
           </span>
         </div>
       </div>
+      {reading && <SignModal />}
     </div>
+  );
+}
+
+/** Trailhead kiosk / trail signs: a proper dialog; the expedition clock is paused while it's open. */
+function SignModal() {
+  const reading = useGame((s) => s.reading);
+  const setReading = useGame((s) => s.setReading);
+  if (!reading) return null;
+  return (
+    <Modal onClose={() => setReading(null)} label={reading.title} className="sign">
+      <div className="sign-k">Clock paused while reading</div>
+      <h2>{reading.title}</h2>
+      {reading.text.split('\n').map((l, i) => (
+        <p key={i}>{l}</p>
+      ))}
+      <button type="button" className="btn primary" onClick={() => setReading(null)}>
+        Continue
+      </button>
+    </Modal>
   );
 }

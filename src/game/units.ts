@@ -79,3 +79,12 @@ export function fmtWind(mph: number) {
   if (system === 'metric') return `${Math.round(mph * MI_TO_KM)} km/h`;
   return `${Math.round(mph)} mph`;
 }
+
+/** Short ground distance (guidance, signs): feet under ~0.2 mi, else miles. */
+export function fmtShortDistance(ft: number) {
+  if (system === 'metric') {
+    const m = ft * FT_TO_M;
+    return m < 950 ? `${Math.max(5, Math.round(m / 5) * 5)} m` : `${(m / 1000).toFixed(1)} km`;
+  }
+  return ft < 1000 ? `${Math.max(10, Math.round(ft / 10) * 10)} ft` : `${(ft / 5280).toFixed(1)} mi`;
+}

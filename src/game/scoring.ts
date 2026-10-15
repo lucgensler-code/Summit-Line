@@ -1,13 +1,21 @@
-// Arcade expedition score. Pure and transparent: every component has a clear maximum and a
-// one-line hint so players know how to improve. Completion time dominates; collectibles can't.
+// Summit score, model v2 (v0.4). Speed is the primary skill; gemstones are a secondary reward
+// for taking harder lines; two small style bonuses round it out. Every line has a clear maximum
+// and a one-line hint. Reaching the summit is worth only a small completion award, so a slow
+// ascent can never outscore a fast one by collecting extras.
+//
+//   Summit reached        1,000
+//   Speed              0 – 6,000   full at ≤ 4:00 real time, linear to 0 at 15:00
+//   Gemstones           150 each   (11 on the Climbers Trail → 1,650)
+//   Clean climb              400   never hit exhaustion
+//   Register signed          200
+//
+// Scores from different models are never compared: records and leaderboard entries carry
+// `SCORE_VERSION`, and boards only rank entries of the current version.
+
+export const SCORE_VERSION = 2;
 
 export interface ScoreInput {
   realSeconds: number;
-  routeMiles: number;
-  distanceMi: number;
-  waterUsedL: number;
-  foodUsed: number;
-  finalMaxStamina: number;
   exhaustions: number;
   gems: number;
   gemsAvailable: number;
@@ -15,7 +23,7 @@ export interface ScoreInput {
 }
 
 export interface ScoreLine {
-  id: 'summit' | 'speed' | 'resources' | 'route' | 'gems' | 'expedition';
+  id: 'summit' | 'speed' | 'gems' | 'clean' | 'register';
   label: string;
   points: number;
   max: number;
@@ -23,57 +31,49 @@ export interface ScoreLine {
 }
 
 export interface Score {
+  version: number;
   total: number;
   lines: ScoreLine[];
 }
 
 export const SCORE_RULES = {
-  summit: 5000,
-  speedMax: 3000,
+  summit: 1000,
+  speedMax: 6000,
   /** full speed bonus at or under this many real seconds … */
-  speedFullAt: 300,
+  speedFullAt: 240,
   /** … falling linearly to zero here */
-  speedZeroAt: 960,
-  resourcesMax: 1000,
-  routeMax: 1000,
-  perGem: 50,
-  register: 150,
-  cleanClimb: 250,
+  speedZeroAt: 900,
+  perGem: 150,
+  cleanClimb: 400,
+  register: 200,
 };
 
 const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
+const mmss = (s: number) => `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, '0')}`;
+
+export function speedPoints(realSeconds: number) {
+  const R = SCORE_RULES;
+  return Math.round(R.speedMax * clamp01((R.speedZeroAt - realSeconds) / (R.speedZeroAt - R.speedFullAt)));
+}
 
 export function computeScore(s: ScoreInput): Score {
   const R = SCORE_RULES;
-  const speedK = clamp01((R.speedZeroAt - s.realSeconds) / (R.speedZeroAt - R.speedFullAt));
-  const speed = Math.round(R.speedMax * speedK);
-  // Supplies: 600 for using little (2 L water + 4 bars ≈ zero), 400 for finishing with energy in reserve.
-  const used = s.waterUsedL + s.foodUsed * 0.5;
-  const supplies = Math.round(600 * clamp01(1 - used / 4) + 400 * clamp01(s.finalMaxStamina / 100));
-  // Route: walking the route length (or less, via shortcuts) earns everything; wandering costs.
-  const ratio = s.routeMiles / Math.max(s.distanceMi, 0.01);
-  const route = Math.round(R.routeMax * Math.pow(clamp01(ratio), 2));
-  const gems = Math.min(s.gems, s.gemsAvailable) * R.perGem;
-  const expedition = (s.registerSigned ? R.register : 0) + (s.exhaustions === 0 ? R.cleanClimb : 0);
+  const gems = Math.min(s.gems, s.gemsAvailable);
   const lines: ScoreLine[] = [
-    { id: 'summit', label: 'Summit completion', points: R.summit, max: R.summit, hint: 'Reach the true summit.' },
-    { id: 'speed', label: 'Speed bonus', points: speed, max: R.speedMax, hint: `Full bonus under ${R.speedFullAt / 60}:00 real time.` },
-    { id: 'resources', label: 'Resource efficiency', points: supplies, max: R.resourcesMax, hint: 'Use supplies sparingly and keep energy in reserve.' },
-    { id: 'route', label: 'Route efficiency', points: route, max: R.routeMax, hint: 'Avoid wandering; smart shortcuts count.' },
-    { id: 'gems', label: 'Gemstone bonus', points: gems, max: s.gemsAvailable * R.perGem, hint: `${R.perGem} points per gemstone.` },
-    {
-      id: 'expedition',
-      label: 'Expedition style',
-      points: expedition,
-      max: R.register + R.cleanClimb,
-      hint: 'Sign the climbers register; never hit exhaustion.',
-    },
+    { id: 'speed', label: 'Speed', points: speedPoints(s.realSeconds), max: R.speedMax, hint: `Full points at ${mmss(R.speedFullAt)} or faster; none after ${mmss(R.speedZeroAt)}.` },
+    { id: 'gems', label: `Gemstones (${gems}/${s.gemsAvailable})`, points: gems * R.perGem, max: s.gemsAvailable * R.perGem, hint: `${R.perGem} each — greens sit on the steep cut-offs.` },
+    { id: 'summit', label: 'Summit reached', points: R.summit, max: R.summit, hint: 'Stand on the true summit.' },
+    { id: 'clean', label: 'Clean climb', points: s.exhaustions === 0 ? R.cleanClimb : 0, max: R.cleanClimb, hint: 'Never hit exhaustion.' },
+    { id: 'register', label: 'Register signed', points: s.registerSigned ? R.register : 0, max: R.register, hint: 'Sign the summit register.' },
   ];
-  return { total: lines.reduce((a, l) => a + l.points, 0), lines };
+  return { version: SCORE_VERSION, total: lines.reduce((a, l) => a + l.points, 0), lines };
 }
 
 /** Upper bound used to sanity-check submitted scores. */
 export function maxPossibleScore(gemsAvailable: number) {
   const R = SCORE_RULES;
-  return R.summit + R.speedMax + R.resourcesMax + R.routeMax + gemsAvailable * R.perGem + R.register + R.cleanClimb;
+  return R.summit + R.speedMax + gemsAvailable * R.perGem + R.cleanClimb + R.register;
 }
+
+/** Fastest real time we accept as plausible (well under what the sim allows). */
+export const MIN_PLAUSIBLE_SECONDS = 150;

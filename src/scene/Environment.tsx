@@ -110,9 +110,18 @@ export function currentHour() {
   const p = runtime.player;
   if (p && g.phase === 'summit' && p.summited) return summitCinematic().hour;
   if (p && g.phase !== 'prep') return clockHour(p, runtime.loadout);
+  // Home screen lighting follows the chosen start: alpine start = purple pre-dawn with stars,
+  // sunrise = warm orange morning, late start = full afternoon daylight. Eases between themes.
   const h = g.loadout.departureHour;
-  return h < 6 ? 5.75 : h + 0.4;
+  const target = h < 6 ? 4.8 : h < 8 ? 6.45 : 14;
+  const now = performance.now() / 1000;
+  const dt = Math.min(0.25, now - prepEase.t);
+  prepEase.t = now;
+  if (prepEase.h < 0) prepEase.h = target;
+  prepEase.h += (target - prepEase.h) * (1 - Math.exp(-dt * 2.2));
+  return prepEase.h;
 }
+const prepEase = { h: -1, t: 0 };
 
 // ---------------------------------------------------------------------------------------------
 
@@ -370,14 +379,18 @@ export function Spindrift() {
     return { geo, seeds };
   }, []);
   const matRef = useRef<THREE.PointsMaterial>(null);
-  useFrame(({ clock }) => {
+  useFrame(({ clock, camera }) => {
     const p = runtime.player;
     const pts = ref.current;
     if (!pts || !matRef.current) return;
     const ft = p ? elevationFt(p.y) : 0;
+    // The particles live in a volume that wraps around the camera (world-anchored, so they don't
+    // swim), and fade out as the camera pulls back — no visible "snow box" when zoomed out.
+    const zoomFade = 1 - smoothstep(12, 26, runtime.cam.dist);
     // Faint drifting motes in the forest and meadows, building to spindrift near the summit.
     const high = smoothstep(8600, 9800, ft);
-    const amount = useGame.getState().phase === 'prep' ? 0 : 0.22 + high * 0.78;
+    const phase = useGame.getState().phase;
+    const amount = phase === 'prep' || phase === 'summit' ? 0 : (0.22 + high * 0.78) * zoomFade;
     matRef.current.opacity = amount * 0.85;
     matRef.current.size = 0.06 + high * 0.04;
     matRef.current.color.set(high > 0.5 ? '#ffffff' : '#fff1c4');
@@ -385,15 +398,20 @@ export function Spindrift() {
     if (!pts.visible || !p) return;
     const t = clock.elapsedTime;
     const pos = geo.attributes.position as THREE.BufferAttribute;
-    const S = 40;
+    const S = 30;
+    const H = 16;
+    const cx = camera.position.x;
+    const cy = camera.position.y;
+    const cz = camera.position.z;
+    const wrap = (v: number, m: number) => ((v % m) + m) % m;
     for (let i = 0; i < COUNT; i++) {
       const sx = seeds[i * 3];
       const sy = seeds[i * 3 + 1];
       const sz = seeds[i * 3 + 2];
-      const x = ((((sx * S + t * (9 + sy * 6)) % S) + S) % S) - S / 2;
-      const z = ((((sz * S + t * 3 * Math.sin(sx * 6)) % S) + S) % S) - S / 2;
-      const y = ((sy * 14 + Math.sin(t * 2 + sx * 30) * 0.8) % 14) - 2;
-      pos.setXYZ(i, p.x + x, p.y + y, p.z + z);
+      const x = cx + wrap(sx * S * 7 + t * (9 + sy * 6) - cx, S) - S / 2;
+      const z = cz + wrap(sz * S * 7 + t * 3 * Math.sin(sx * 6) - cz, S) - S / 2;
+      const y = cy + wrap(sy * H * 7 - t * (0.6 + sx) + Math.sin(t * 2 + sx * 30) * 0.8 - cy, H) - H / 2;
+      pos.setXYZ(i, x, y, z);
     }
     pos.needsUpdate = true;
   });

@@ -141,7 +141,8 @@ export function Trees() {
     <group>
       <Chunked items={firs} geometry={fir} material={mats.foliage} place={place} cast receive />
       <Chunked items={spruces} geometry={spruce} material={mats.foliage} place={place} cast receive />
-      <Chunked items={W.trees} geometry={trunk} material={mats.trunk} place={placeTrunk} cast />
+      {/* Trunks sit under the canopy: their shadows are invisible, so they don't cast. */}
+      <Chunked items={W.trees} geometry={trunk} material={mats.trunk} place={placeTrunk} />
     </group>
   );
 }
@@ -150,7 +151,12 @@ export function Rocks() {
   const W = getWorld();
   const geoA = useMemo(() => jitter(new THREE.IcosahedronGeometry(1, 0), 0.45, 7), []);
   const geoB = useMemo(() => jitter(new THREE.DodecahedronGeometry(1, 0), 0.55, 19), []);
-  const [rocksA, rocksB] = useMemo(() => [W.rocks.filter((r) => r.tint < 0.55), W.rocks.filter((r) => r.tint >= 0.55)], [W]);
+  // Only boulders cast shadows; pebbles and small rocks don't need the shadow pass.
+  const [rocksA, rocksB, bigA, bigB] = useMemo(() => {
+    const small = W.rocks.filter((r) => r.s <= 1.2);
+    const big = W.rocks.filter((r) => r.s > 1.2);
+    return [small.filter((r) => r.tint < 0.55), small.filter((r) => r.tint >= 0.55), big.filter((r) => r.tint < 0.55), big.filter((r) => r.tint >= 0.55)];
+  }, [W]);
   const mat = useMemo(() => new THREE.MeshStandardMaterial({ flatShading: true, roughness: 0.92 }), []);
   const palette = useMemo(
     () => ({
@@ -182,8 +188,10 @@ export function Rocks() {
   );
   return (
     <group>
-      <Chunked items={rocksA} geometry={geoA} material={mat} place={place} cast receive />
-      <Chunked items={rocksB} geometry={geoB} material={mat} place={place} cast receive />
+      <Chunked items={rocksA} geometry={geoA} material={mat} place={place} receive />
+      <Chunked items={rocksB} geometry={geoB} material={mat} place={place} receive />
+      <Chunked items={bigA} geometry={geoA} material={mat} place={place} cast receive />
+      <Chunked items={bigB} geometry={geoB} material={mat} place={place} cast receive />
     </group>
   );
 }
@@ -237,15 +245,10 @@ export function TrailMarkers() {
   );
 }
 
-/** Fallen logs, ferns, wind-carved rock spires, snowdrifts and crater ice — all instanced. */
+/** Ferns, a few wind-carved rock spires, snowdrifts and crater ice — all instanced. */
 export function Ecology() {
   const W = getWorld();
   const g = useMemo(() => {
-    const log = merge([
-      tint(new THREE.CylinderGeometry(0.32, 0.38, 6, 7).rotateZ(Math.PI / 2).translate(0, 0.3, 0), '#6a4a32'),
-      tint(new THREE.CylinderGeometry(0.33, 0.33, 0.05, 7).rotateZ(Math.PI / 2).translate(3.02, 0.3, 0), '#b08a5a'),
-      tint(new THREE.CylinderGeometry(0.06, 0.08, 1.1, 4).rotateZ(0.9).translate(-1.2, 0.7, 0.2), '#5a3d28'),
-    ]);
     const fern = jitter(new THREE.ConeGeometry(0.7, 0.55, 6, 1, true).translate(0, 0.27, 0), 0.18, 77);
     const spire = jitter(new THREE.CylinderGeometry(0.25, 0.85, 3.2, 6, 3).translate(0, 1.4, 0), 0.35, 91);
     const drift = jitter(new THREE.SphereGeometry(1, 9, 5, 0, Math.PI * 2, 0, Math.PI / 2), 0.18, 101);
@@ -260,11 +263,10 @@ export function Ecology() {
         ),
       ),
     );
-    return { log, fern, spire, drift, ice };
+    return { fern, spire, drift, ice };
   }, []);
   const mats = useMemo(
     () => ({
-      log: new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 1 }),
       fern: new THREE.MeshStandardMaterial({ flatShading: true, roughness: 1, side: THREE.DoubleSide }),
       spire: new THREE.MeshStandardMaterial({ color: '#3d3434', flatShading: true, roughness: 0.95 }),
       drift: new THREE.MeshStandardMaterial({ color: '#f2f7fc', roughness: 0.9 }),
@@ -273,7 +275,6 @@ export function Ecology() {
     [],
   );
   const fernCols = useMemo(() => [new THREE.Color('#3f7a2c'), new THREE.Color('#5a8a30'), new THREE.Color('#2f6630')], []);
-  const placeLog = useMemo(() => (it: Scatter) => ({ y: it.y - 0.05, sx: it.s, sy: it.s, sz: it.s }), []);
   const placeFern = useMemo(
     () => (it: Scatter) => {
       col.copy(fernCols[Math.floor(it.tint * 3) % 3]);
@@ -286,7 +287,6 @@ export function Ecology() {
   const placeIce = useMemo(() => (it: Scatter) => ({ y: it.y - 0.2, sx: it.s, sy: it.s, sz: it.s }), []);
   return (
     <group>
-      <Chunked items={W.logs} geometry={g.log} material={mats.log} place={placeLog} cast receive />
       <Chunked items={W.ferns} geometry={g.fern} material={mats.fern} place={placeFern} receive />
       <Chunked items={W.spires} geometry={g.spire} material={mats.spire} place={placeSpire} cast receive />
       <Chunked items={W.drifts} geometry={g.drift} material={mats.drift} place={placeDrift} receive />

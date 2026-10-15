@@ -45,7 +45,7 @@ function GemItem({ gem, cluster, base, mats, glow, beamGeo }: { gem: Gem; cluste
     <group ref={group} position={[gem.x, gem.y, gem.z]} rotation={[0, rot, 0]}>
       <mesh geometry={base} material={mats.base} castShadow receiveShadow />
       <mesh ref={crystal} geometry={cluster} material={mats[gem.kind]} castShadow />
-      <sprite material={glow[gem.kind]} position={[0, 0.45, 0]} scale={[1.7, 1.7, 1]} />
+      <sprite material={glow[gem.kind]} position={[0, 0.45, 0]} scale={[1.15, 1.15, 1]} />
       <mesh geometry={beamGeo} material={mats[`${gem.kind}Beam`]} position={[0, 9, 0]} />
     </group>
   );
@@ -79,11 +79,11 @@ export function Gems() {
     const tex = glowTexture();
     const beam = new THREE.CylinderGeometry(0.05, 0.16, 18, 6, 1, true);
     const mk = (k: 'green' | 'red') =>
-      new THREE.MeshStandardMaterial({ color: STYLE[k].color, emissive: STYLE[k].emissive, emissiveIntensity: 0.85, roughness: 0.22, metalness: 0.05, flatShading: true, transparent: true, opacity: 0.92 });
+      new THREE.MeshStandardMaterial({ color: STYLE[k].color, emissive: STYLE[k].emissive, emissiveIntensity: 0.55, roughness: 0.22, metalness: 0.05, flatShading: true, transparent: true, opacity: 0.92 });
     const beamMat = (k: 'green' | 'red') =>
-      new THREE.MeshBasicMaterial({ color: STYLE[k].glow, transparent: true, opacity: 0.07, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: true });
+      new THREE.MeshBasicMaterial({ color: STYLE[k].glow, transparent: true, opacity: 0.035, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: true });
     const sprite = (k: 'green' | 'red') =>
-      new THREE.SpriteMaterial({ map: tex, color: STYLE[k].glow, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0.55 });
+      new THREE.SpriteMaterial({ map: tex, color: STYLE[k].glow, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0.3 });
     return {
       cluster,
       base,

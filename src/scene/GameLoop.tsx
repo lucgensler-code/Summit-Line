@@ -1,7 +1,7 @@
 import { useFrame } from '@react-three/fiber';
 import { useRef } from 'react';
-import { updateWind } from '../game/audio';
-import { input, moveAxes } from '../game/input';
+import { cue, updateWind } from '../game/audio';
+import { cameraKeyAxes, input, moveAxes } from '../game/input';
 import { getLandmarks } from '../game/landmarks';
 import {
   clockHour,
@@ -22,6 +22,7 @@ import {
 import { CAM_MAX, CAM_MIN } from '../game/store';
 import { conditionsAt } from '../game/weather';
 import { overlayOpen, runtime, useGame, type HudSnapshot } from '../game/store';
+import { cardinal, placeName, safeTrailPoint, stepNav, trailDistance } from '../game/navigation';
 import { SURFACE_LABEL, elevationFt, getWorld, unitsToMiles } from '../game/world';
 
 interface Interaction {
@@ -36,7 +37,8 @@ function findInteraction(p: PlayerState): Interaction | null {
       label: 'Touch the summit benchmark',
       run: () => {
         p.summited = true;
-        runtime.summitAt = performance.now() / 1000;
+        runtime.summitAt = 0; // the summit screen starts the cinematic after the name step
+        cue('summit');
         g.completeSummit();
       },
     };
@@ -60,7 +62,10 @@ function findInteraction(p: PlayerState): Interaction | null {
       }
       return {
         label: lm.kind === 'kiosk' ? 'Read the trailhead kiosk' : 'Read the sign',
-        run: () => g.setReading(g.reading?.title === lm.title ? null : { title: lm.title, text: lm.text }),
+        run: () => {
+          runtime.readSigns.add(lm.id);
+          g.setReading({ title: lm.title, text: lm.text });
+        },
       };
     }
   }
@@ -75,6 +80,9 @@ function objectiveFor(p: PlayerState) {
 
 export function GameLoop() {
   const hudTimer = useRef(0);
+  const keyCam = useRef({ yaw: 0, pitch: 0 });
+  const recenterT = useRef(0);
+  const navTimer = useRef(0);
   const flags = useRef({ run: -1, thirsty: false, hungry: false, sunrise: false, soft: false, snow: false });
 
   useFrame((_, rawDt) => {
@@ -85,10 +93,29 @@ export function GameLoop() {
 
     // Camera input (applies while playing / paused).
     if (g.phase === 'playing' || g.phase === 'paused' || g.phase === 'summit') {
-      const touched = input.lookDX !== 0 || input.lookDY !== 0 || input.zoom !== 0 || input.zoomMul !== 1;
-      cam.yaw -= input.lookDX * 0.0055;
-      cam.pitch = Math.min(1.25, Math.max(-0.2, cam.pitch + input.lookDY * 0.004));
-      cam.dist = Math.min(CAM_MAX, Math.max(CAM_MIN, (cam.dist * (1 + input.zoom * 0.12)) / input.zoomMul));
+      const keys = g.phase === 'paused' ? { yaw: 0, pitch: 0, zoom: 0 } : cameraKeyAxes();
+      const touched = input.lookDX !== 0 || input.lookDY !== 0 || input.zoom !== 0 || input.zoomMul !== 1 || keys.yaw !== 0 || keys.pitch !== 0 || keys.zoom !== 0;
+      // Keyboard camera (arrows by default): eased so a tap nudges and a hold turns smoothly.
+      const kc = keyCam.current;
+      kc.yaw += (keys.yaw - kc.yaw) * (1 - Math.exp(-dt * 10));
+      kc.pitch += (keys.pitch - kc.pitch) * (1 - Math.exp(-dt * 10));
+      cam.yaw -= input.lookDX * 0.0055 + kc.yaw * 2.1 * dt;
+      cam.pitch = Math.min(1.25, Math.max(-0.2, cam.pitch + input.lookDY * 0.004 + kc.pitch * 0.9 * dt));
+      const zoomRate = Math.pow(1.9, keys.zoom * dt);
+      cam.dist = Math.min(CAM_MAX, Math.max(CAM_MIN, (cam.dist * (1 + input.zoom * 0.12) * zoomRate) / input.zoomMul));
+      // Recenter: glide the camera behind the climber's direction of travel.
+      if (input.recenter && p) {
+        input.recenter = false;
+        recenterT.current = 0.7;
+      }
+      if (input.lookDX !== 0 || keys.yaw !== 0) recenterT.current = 0;
+      if (recenterT.current > 0 && p) {
+        recenterT.current -= dt;
+        let d = p.heading + Math.PI - cam.yaw;
+        d = Math.atan2(Math.sin(d), Math.cos(d));
+        cam.yaw += d * (1 - Math.exp(-dt * 7));
+        cam.pitch += (0.3 - cam.pitch) * (1 - Math.exp(-dt * 5));
+      }
       if (touched && !runtime.cameraUsed) {
         runtime.cameraUsed = true;
         g.dismissHint();
@@ -115,10 +142,19 @@ export function GameLoop() {
     while (input.queue.length) {
       const a = input.queue.shift()!;
       if (a === 'interact') {
-        // One button: contextual Action near something interactive, otherwise Jump.
+        // Touch button / F: contextual Action near something interactive, otherwise Jump.
         if (interaction) interaction.run();
-        else if (g.reading) g.setReading(null);
         else jump(p);
+      } else if (a === 'primary') {
+        // Space on desktop: act when there is something to act on; otherwise rest when standing
+        // still, or hop while moving.
+        if (interaction) interaction.run();
+        else if (p.speed < 0.6 || p.resting) {
+          const r = toggleRest(p);
+          g.toast(r.text, r.ok ? 'info' : 'warn');
+        } else jump(p);
+      } else if (a === 'jump') {
+        jump(p);
       } else if (a === 'eat') {
         const r = eat(p);
         g.toast(r.text, r.ok ? 'good' : 'warn', 2);
@@ -149,10 +185,12 @@ export function GameLoop() {
         };
         g.toast(msg[e.id] ?? e.name, 'good', 2);
       } else if (e.type === 'exhausted') {
+        cue('warn');
         g.toast('Exhausted · drink, eat or rest', 'warn', 3);
       } else if (e.type === 'gem') {
         runtime.fx.push({ kind: e.kind, x: e.x, y: e.y, z: e.z, t0: performance.now() / 1000 });
         g.flashGem(e.kind);
+        cue(e.kind);
         g.toast(e.kind === 'green' ? 'Stamina restored' : `Speed boost · ${SPEED_BOOST.seconds}s`, 'good', 3);
       } else g.toast(e.text, e.tone);
     };
@@ -185,6 +223,24 @@ export function GameLoop() {
     if (hudTimer.current <= 0) {
       hudTimer.current = 0.1;
       const W = getWorld();
+      // Trail status with hysteresis, and a safe way back when straying.
+      const nav = runtime.nav;
+      const tDist = p.onTrail ? 0 : trailDistance(p.x, p.z);
+      stepNav(nav, p.onTrail, 0.1, tDist);
+      navTimer.current -= 0.1;
+      if (nav.state === 'on') nav.safe = null;
+      else if (navTimer.current <= 0 || !nav.safe) {
+        navTimer.current = 0.5;
+        nav.safe = safeTrailPoint(p.x, p.z);
+      }
+      const safe = nav.safe;
+      const guide = safe
+        ? {
+            distFt: Math.hypot(safe.x - p.x, safe.z - p.z) * W.miPerUnit * 5280,
+            card: cardinal(Math.atan2(safe.x - p.x, safe.z - p.z)),
+            rel: (((cam.yaw + Math.PI - Math.atan2(safe.x - p.x, safe.z - p.z)) * 180) / Math.PI + 540) % 360 - 180,
+          }
+        : null;
       const hud: HudSnapshot = {
         elevFt: elevationFt(p.y),
         gainFt: p.elevGain * W.ftPerUnit,
@@ -223,10 +279,12 @@ export function GameLoop() {
           return { tempF: c.tempF, windMph: c.windMph, weather: c.label };
         })(),
         consumeKind: p.consumeT > 0 ? p.consumeKind : null,
+        trailState: nav.state,
+        place: placeName(p.x, p.z),
+        guide,
+        realSeconds: p.realTime,
       };
       g.setHud(hud);
-      // Close sign text when walking away.
-      if (g.reading && !interaction) g.setReading(null);
     }
   });
   return null;

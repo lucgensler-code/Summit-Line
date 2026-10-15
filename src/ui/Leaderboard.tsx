@@ -93,6 +93,11 @@ export function Leaderboard({ highlightId }: { highlightId?: string }) {
                     {r.name}
                     {r === best && source === 'shared' && <span className="pb-tag">YOU</span>}
                     {source === 'local' && i === 0 && <span className="pb-tag">PB</span>}
+                    {r.migrated && (
+                      <span className="pb-tag old" title="Recomputed from a v0.3 climb (older pacing, no clean-climb data)">
+                        v0.3
+                      </span>
+                    )}
                   </td>
                   <td className="num">{r.score.toLocaleString('en-US')}</td>
                   <td className="num">{fmtReal(r.realSeconds)}</td>
@@ -103,7 +108,10 @@ export function Leaderboard({ highlightId }: { highlightId?: string }) {
           </table>
         </div>
       )}
-      <p className="lb-foot">Times are real-world play time. {source === 'shared' ? 'Each player’s best score and best time appear once.' : ''}</p>
+      <p className="lb-foot">
+        Times are real-world play time. Score = speed (up to 6,000) + 150 per gem + 1,000 summit + clean climb 400 + register 200.
+        {source === 'shared' ? ' Each player’s five best runs can appear.' : ''}
+      </p>
     </Modal>
   );
 }

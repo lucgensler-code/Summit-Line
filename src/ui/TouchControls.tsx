@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
+import { SPEED_BOOST } from '../game/sim';
+import { IconRun } from './icons';
 import { input, queueAction } from '../game/input';
 import { useGame } from '../game/store';
 
@@ -108,7 +110,7 @@ export function CameraGestures() {
   return <GestureLayer stick={false} />;
 }
 
-/** Joystick visual, contextual Jump/Action and Jog. */
+/** Joystick visual, contextual Jump/Action and Run. */
 export function TouchControls() {
   const [enabled] = useState(isTouchDevice);
   const [knob, setKnob] = useState({ active: false, cx: 0, cy: 0, x: 0, y: 0 });
@@ -139,15 +141,16 @@ export function TouchControls() {
         <div className="boost-ring" aria-label={`Speed boost ${Math.ceil(boostLeft)} seconds`}>
           <svg viewBox="0 0 36 36" aria-hidden="true">
             <circle cx="18" cy="18" r="15.5" className="track" />
-            <circle cx="18" cy="18" r="15.5" className="arc" style={{ strokeDasharray: `${(boostLeft / 12) * 97.4} 97.4` }} />
+            <circle cx="18" cy="18" r="15.5" className="arc" style={{ strokeDasharray: `${(boostLeft / SPEED_BOOST.seconds) * 97.4} 97.4` }} />
           </svg>
           <b>{Math.ceil(boostLeft)}</b>
         </div>
       )}
       <div className="touch-buttons">
         {act && <div className="act-label">{prompt}</div>}
-        <button type="button" className={`tbtn jog ${jog ? 'on' : ''}`} onPointerDown={() => setJog((j) => !j)} aria-pressed={jog}>
-          Jog
+        <button type="button" className={`tbtn jog ${jog ? 'on' : ''}`} onPointerDown={() => setJog((j) => !j)} aria-pressed={jog} aria-label="Run">
+          <IconRun size={18} />
+          <span>Run</span>
         </button>
         <button type="button" className={`tbtn main ${act ? 'act' : 'jump'}`} onPointerDown={() => queueAction('interact')}>
           {act ? 'Action' : 'Jump'}

@@ -613,17 +613,19 @@ function addCollider(W: World, x: number, z: number, r: number) {
   arr.push({ x, z, r });
 }
 
+const nearOut: { x: number; z: number; r: number }[] = [];
+/** Colliders in the 3×3 cells around a point. Returns a shared array (no per-frame allocation). */
 export function collidersNear(x: number, z: number) {
   const W = getWorld();
   const cx = Math.floor(x / COL_CELL);
   const cz = Math.floor(z / COL_CELL);
-  const out: { x: number; z: number; r: number }[] = [];
+  nearOut.length = 0;
   for (let dx = -1; dx <= 1; dx++)
     for (let dz = -1; dz <= 1; dz++) {
       const arr = W.colliders.get(colKey(cx + dx, cz + dz));
-      if (arr) out.push(...arr);
+      if (arr) for (let i = 0; i < arr.length; i++) nearOut.push(arr[i]);
     }
-  return out;
+  return nearOut;
 }
 
 function scatterAll(W: World) {
@@ -722,14 +724,14 @@ function scatterAll(W: World) {
     const a = rand() * Math.PI * 2;
     return { x: Math.sin(a) * r, z: Math.cos(a) * r };
   };
-  scatter(420, 9000, square, (x, z, h, sl) => h < TREELINE_H - 8 && sl < 0.5 && clearOf(x, z, 5) && !nearTrailhead(x, z), (it) => W.logs.push(it), 0.7, 1.4);
-  scatter(2600, 20000, square, (x, z, h, sl) => h < TREELINE_H + 4 && sl < 0.8 && clearOf(x, z, 2.2) && !nearLake(x, z, 2), (it) => W.ferns.push(it), 0.45, 0.95);
-  scatter(70, 4000, polar(70, 330), (x, z, h, sl) => h > 175 && sl > 0.45 && sl < 1.2 && clearOf(x, z, 6), (it) => {
+  scatter(0, 0, square, (x, z, h, sl) => h < TREELINE_H - 8 && sl < 0.5 && clearOf(x, z, 5) && !nearTrailhead(x, z), (it) => W.logs.push(it), 0.7, 1.4);
+  scatter(1300, 12000, square, (x, z, h, sl) => h < TREELINE_H + 4 && sl < 0.8 && clearOf(x, z, 2.2) && !nearLake(x, z, 2), (it) => W.ferns.push(it), 0.45, 0.95);
+  scatter(12, 4000, polar(70, 330), (x, z, h, sl) => h > 175 && sl > 0.45 && sl < 1.2 && clearOf(x, z, 6), (it) => {
     W.spires.push(it);
     addCollider(W, it.x, it.z, 0.9 * it.s);
   }, 1.2, 2.6);
-  scatter(260, 6000, polar(36, 230), (x, z, h, sl) => snowCover(x, z, h, sl) > 0.55 && clearOf(x, z, 3.5), (it) => W.drifts.push(it), 1.2, 3.4);
-  scatter(46, 3000, polar(RIM_R - 26, RIM_R + 22), (x, z, h, sl) => clearOf(x, z, 2.5) && sl < 1.6 && h > 300, (it) => W.ice.push(it), 0.6, 1.5);
+  scatter(160, 6000, polar(36, 230), (x, z, h, sl) => snowCover(x, z, h, sl) > 0.55 && clearOf(x, z, 3.5), (it) => W.drifts.push(it), 1.2, 3.4);
+  scatter(8, 3000, polar(RIM_R - 26, RIM_R + 22), (x, z, h, sl) => clearOf(x, z, 2.5) && sl < 1.6 && h > 300, (it) => W.ice.push(it), 0.6, 1.5);
   // Far forest beyond the playable boundary softens the transition to the foothills.
   scatter(2200, 12000, polar(BOUNDARY_R + 10, HALF * 1.38), (x, z, h) => Math.max(Math.abs(x), Math.abs(z)) < HALF - 6 && h < TREELINE_H, (it) => W.trees.push({ ...it, s: 0.9 + it.s * 0.5, y: it.y - 0.3 }), 0.4, 1.2);
 
@@ -776,18 +778,47 @@ export function remainingToSummit(x: number, z: number) {
 /** Resolve the route's gem specs (trail fraction + sideways offset) into world positions. */
 function placeGems(W: World): Gem[] {
   const main = W.main;
-  return ACTIVE_ROUTE.gems.map((g) => {
-    const target = g.at * main.length;
+  const indexAt = (frac: number) => {
+    const target = frac * main.length;
     let i = 0;
     while (i < main.pts.length - 2 && main.s[i] < target) i++;
-    const a = main.pts[Math.max(i - 1, 0)];
-    const b = main.pts[i + 1];
-    const dx = b.x - a.x;
-    const dz = b.z - a.z;
-    const l = Math.hypot(dx, dz) || 1;
-    // right-hand perpendicular of the travel direction
-    const x = main.pts[i].x - (dz / l) * g.side;
-    const z = main.pts[i].z + (dx / l) * g.side;
+    return i;
+  };
+  return ACTIVE_ROUTE.gems.map((g) => {
+    const i = indexAt(g.at);
+    let x: number;
+    let z: number;
+    if (g.cut !== undefined) {
+      // Find the switchback leg directly above: the farthest-along trail point within reach.
+      const p0 = main.pts[i];
+      let best = i;
+      for (let k = i; k < main.pts.length; k++) {
+        if (Math.hypot(main.pts[k].x - p0.x, main.pts[k].z - p0.z) < 45 && main.s[k] > main.s[best]) best = k;
+      }
+      const p1 = main.pts[best];
+      x = lerp(p0.x, p1.x, g.cut);
+      z = lerp(p0.z, p1.z, g.cut);
+    } else {
+      const a = main.pts[Math.max(i - 1, 0)];
+      const b = main.pts[i + 1];
+      const dx = b.x - a.x;
+      const dz = b.z - a.z;
+      const l = Math.hypot(dx, dz) || 1;
+      // right-hand perpendicular of the travel direction
+      x = main.pts[i].x - (dz / l) * g.side;
+      z = main.pts[i].z + (dx / l) * g.side;
+    }
+    // Never bury a gem in a tree or boulder: push it clear of any collider.
+    for (const c of collidersNear(x, z)) {
+      const d = Math.hypot(x - c.x, z - c.z);
+      const need = c.r + 1.2;
+      if (d < need) {
+        const ux = d > 1e-3 ? (x - c.x) / d : 1;
+        const uz = d > 1e-3 ? (z - c.z) / d : 0;
+        x = c.x + ux * need;
+        z = c.z + uz * need;
+      }
+    }
     return { id: g.id, kind: g.kind, x, z, y: heightAt(x, z) + 0.02 };
   });
 }

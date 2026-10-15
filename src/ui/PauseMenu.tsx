@@ -1,32 +1,34 @@
 import { useState } from 'react';
 import { isMuted, setMuted } from '../game/audio';
+import { keysSwapped, setKeysSwapped } from '../game/input';
 import { useGame } from '../game/store';
 import { getUnits, setUnits } from '../game/units';
 import { useUnits } from './useUnits';
 
 export function ControlsList() {
+  const swapped = keysSwapped();
   return (
     <div className="controls-list">
       <h3>Desktop</h3>
       <dl>
-        <dt>W A S D / Arrows</dt>
+        <dt>{swapped ? 'Arrow keys' : 'W A S D'}</dt>
         <dd>Move (camera-relative)</dd>
+        <dt>{swapped ? 'W A S D' : 'Arrow keys'}</dt>
+        <dd>Turn and tilt the camera</dd>
         <dt>Shift</dt>
-        <dd>Jog — faster, burns stamina</dd>
-        <dt>Mouse drag</dt>
-        <dd>Rotate camera</dd>
-        <dt>Scroll</dt>
-        <dd>Camera distance</dd>
+        <dd>Run — faster, burns stamina</dd>
+        <dt>Mouse drag · Scroll · + / −</dt>
+        <dd>Rotate camera · Zoom</dd>
+        <dt>C</dt>
+        <dd>Recenter the camera behind you</dd>
         <dt>Space</dt>
-        <dd>Jump — or Action near signs, the register, water and the summit</dd>
+        <dd>Action near signs, the register, water and the summit — otherwise rest when stopped, jump when moving</dd>
+        <dt>F · J</dt>
+        <dd>Action · Jump</dd>
         <dt>E / Q / R</dt>
         <dd>Eat · Drink · Rest</dd>
-        <dt>M</dt>
-        <dd>Map</dd>
-        <dt>Esc</dt>
-        <dd>Pause</dd>
-        <dt>N</dt>
-        <dd>Mute sound</dd>
+        <dt>M · Esc · N</dt>
+        <dd>Map · Pause · Mute</dd>
       </dl>
       <h3>Touch</h3>
       <dl>
@@ -37,17 +39,17 @@ export function ControlsList() {
         <dt>Two-finger pinch</dt>
         <dd>Zoom from over-the-shoulder to wide view</dd>
         <dt>Buttons</dt>
-        <dd>Jog, Jump/Action; eat, drink and rest in the status panel</dd>
+        <dd>Run, Jump/Action; eat, drink and rest in the status panel</dd>
       </dl>
       <h3>Mountaineering tips</h3>
       <ul>
         <li>The trail and boot track are far cheaper than cross-country travel.</li>
         <li>Steep uphill and deep snow drain stamina fast. Stop or rest to recover.</li>
         <li>The hatched end of the stamina bar is energy you have burned — only food restores it.</li>
-        <li>Low hydration slows recovery and makes jogging costly. Drink before you are thirsty.</li>
-        <li>Green gems restore 35% stamina; red gems give 12 s of extra speed — use them for shortcuts.</li>
+        <li>Low hydration slows recovery and makes running costly. Drink before you are thirsty.</li>
+        <li>Green gems (on the steep cut-offs) restore stamina; red gems (at the start of long gentle stretches) give 15 s of extra speed — run with them.</li>
         <li>Eat and drink on the move: water gives an instant stamina lift, food restores energy.</li>
-        <li>Score = summit + speed + supplies + route + gems + style (sign the register, never get exhausted).</li>
+        <li>Score = speed (up to 6,000) + 150 per gem + 1,000 for the summit + 400 clean climb + 200 for signing the register.</li>
         <li>Refill water at Obsidian Tarn; there is none higher up.</li>
       </ul>
     </div>
@@ -57,6 +59,7 @@ export function ControlsList() {
 export function PauseMenu() {
   const { resume, restart, toTrailhead, showControls, setShowControls } = useGame();
   const [muted, setM] = useState(isMuted());
+  const [swap, setSwap] = useState(keysSwapped());
   const units = useUnits();
   const setLbOpen = useGame((s) => s.setLbOpen);
   return (
@@ -96,6 +99,16 @@ export function PauseMenu() {
             </button>
             <button type="button" className="btn subtle" onClick={() => setUnits(getUnits() === 'us' ? 'metric' : 'us')}>
               Units: {units === 'us' ? 'US (ft, mi, lb, fl oz)' : 'Metric (m, km, kg, L)'}
+            </button>
+            <button
+              type="button"
+              className="btn subtle"
+              onClick={() => {
+                setKeysSwapped(!swap);
+                setSwap(!swap);
+              }}
+            >
+              Keys: {swap ? 'Arrows move · WASD camera' : 'WASD move · Arrows camera'}
             </button>
             <button type="button" className="btn subtle" onClick={() => setLbOpen(true)}>
               High scores

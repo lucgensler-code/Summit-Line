@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { getLandmarks, type Landmark } from '../game/landmarks';
 import { LAKE, getWorld, heightAt, snowCover } from '../game/world';
 import { merge, tint } from './Vegetation';
+import { runtime } from '../game/store';
 
 function SignPost({ lm }: { lm: Landmark }) {
   return (
@@ -32,9 +33,47 @@ function SignPost({ lm }: { lm: Landmark }) {
   );
 }
 
+/** Bobbing info marker above the trailhead kiosk until it has been read. */
+function InfoMarker({ id }: { id: string }) {
+  const ref = useRef<THREE.Group>(null);
+  useFrame(({ clock }) => {
+    const g = ref.current;
+    if (!g) return;
+    g.visible = !runtime.readSigns.has(id);
+    g.position.y = 3.55 + Math.sin(clock.elapsedTime * 2.2) * 0.12;
+    g.rotation.y = clock.elapsedTime * 1.2;
+  });
+  return (
+    <group ref={ref} position={[0, 3.55, 0]}>
+      <mesh>
+        <octahedronGeometry args={[0.32, 0]} />
+        <meshBasicMaterial color="#ffb347" toneMapped={false} />
+      </mesh>
+      <mesh position={[0, -0.62, 0]}>
+        <coneGeometry args={[0.12, 0.3, 4]} />
+        <meshBasicMaterial color="#ffb347" toneMapped={false} />
+      </mesh>
+    </group>
+  );
+}
+
 function Kiosk({ lm }: { lm: Landmark }) {
   return (
     <group position={[lm.x, lm.y, lm.z]} rotation={[0, lm.rot + Math.PI / 2, 0]}>
+      <InfoMarker id={lm.id} />
+      {/* Bright header board so the trailhead reads from a distance. */}
+      <mesh position={[0, 2.95, 0.02]} castShadow>
+        <boxGeometry args={[2.5, 0.5, 0.1]} />
+        <meshStandardMaterial color="#c8742f" emissive="#6a3510" emissiveIntensity={0.35} />
+      </mesh>
+      <mesh position={[0, 2.95, 0.075]}>
+        <planeGeometry args={[2.1, 0.12]} />
+        <meshBasicMaterial color="#fff1d6" />
+      </mesh>
+      <mesh position={[0, 2.95, -0.075]} rotation={[0, Math.PI, 0]}>
+        <planeGeometry args={[2.1, 0.12]} />
+        <meshBasicMaterial color="#fff1d6" />
+      </mesh>
       {[-1.1, 1.1].map((x) => (
         <mesh key={x} position={[x, 1.3, 0]} castShadow>
           <boxGeometry args={[0.22, 2.6, 0.22]} />
@@ -57,7 +96,7 @@ function Kiosk({ lm }: { lm: Landmark }) {
         <coneGeometry args={[0.3, 0.45, 3]} />
         <meshBasicMaterial color="#f2f2ee" />
       </mesh>
-      <mesh position={[0, 2.55, 0]} rotation={[0, 0, 0]} castShadow>
+      <mesh position={[0, 2.62, 0]} rotation={[0, 0, 0]} castShadow>
         <boxGeometry args={[2.7, 0.14, 1.1]} />
         <meshStandardMaterial color="#3d4f3a" />
       </mesh>

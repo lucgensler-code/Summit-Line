@@ -1,8 +1,9 @@
+import { prepOrbit } from '../game/prepOrbit';
 import { useFrame, useThree } from '@react-three/fiber';
 import { useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { footstep } from '../game/audio';
-import { clamp, lerp } from '../game/noise';
+import { clamp, lerp, smoothstep } from '../game/noise';
 import { clockHour, daylight } from '../game/sim';
 import { summitCinematic } from '../game/cinematic';
 import { CAM_DEFAULT, CAM_MIN, runtime, useGame } from '../game/store';
@@ -54,6 +55,8 @@ export function Player() {
   const poleL = useRef<THREE.Group>(null);
   const poleR = useRef<THREE.Group>(null);
   const lamp = useRef<THREE.SpotLight>(null);
+  const footL = useRef<THREE.Group>(null);
+  const footR = useRef<THREE.Group>(null);
   const lampTarget = useMemo(() => new THREE.Object3D(), []);
   const gait = useRef({ phase: 0, blendJog: 0, rest: 0, tired: 0, summit: 0, lean: 0, air: 0, eat: 0, rootY: 0 });
   const loadout = useGame((s) => s.loadout);
@@ -118,6 +121,17 @@ export function Player() {
       return heightAt(fx, fz);
     };
     let rootY = p.y;
+    // Ground pitch along the direction of travel (rise over run), for boots and kneeling.
+    const ahead = heightAt(p.x + fwdX * 0.35, p.z + fwdZ * 0.35);
+    const behind = heightAt(p.x - fwdX * 0.35, p.z - fwdZ * 0.35);
+    const groundPitch = Math.atan2(ahead - behind, 0.7);
+    if (g.rest > 0.5) {
+      // Kneeling: the trailing knee rests on the ground behind, the planted foot in front must
+      // not sink into an uphill slope.
+      const kneeH = heightAt(p.x - fwdX * 0.22, p.z - fwdZ * 0.22);
+      const footH = heightAt(p.x + fwdX * 0.42 + fwdZ * 0.12, p.z + fwdZ * 0.42 - fwdX * 0.12);
+      rootY = Math.max(Math.min(p.y, kneeH), footH - 0.12);
+    }
     if (p.jumpH <= 0 && g.rest < 0.5) {
       const hL = footGround(tL, 1);
       const hR = footGround(tR, -1);
@@ -137,6 +151,14 @@ export function Player() {
     set(thighR.current, tR);
     set(shinL.current, kL);
     set(shinR.current, kR);
+    // Boots: cancel the leg's rotation, then match the slope (only while the foot is planted).
+    const planted = (1 - g.air) * (moving ? 0.8 : 1);
+    if (footL.current) footL.current.rotation.x = lerp(footL.current.rotation.x, (-(thighL.current?.rotation.x ?? 0) - (shinL.current?.rotation.x ?? 0) - groundPitch) * planted, k(16));
+    if (footR.current) {
+      // During the kneel the right boot lies toe-down behind the knee.
+      const kneelToe = g.rest * 1.2;
+      footR.current.rotation.x = lerp(footR.current.rotation.x, (-(thighR.current?.rotation.x ?? 0) - (shinR.current?.rotation.x ?? 0) - groundPitch) * planted * (1 - g.rest) + kneelToe, k(16));
+    }
 
     // Arms (poles plant opposite to legs); summit = arms raised
     const armSwing = amp * (loadout.poles ? 0.75 : 0.9);
@@ -170,8 +192,10 @@ export function Player() {
     // Headlamp before sunrise
     if (lamp.current) {
       const dark = 1 - daylight(clockHour(p, runtime.loadout));
+      // Visibility is fixed per run: toggling a light changes the light count, which forces every
+      // material to recompile (a visible hitch at sunrise). Fade intensity instead.
       lamp.current.intensity = loadout.headlamp ? dark * 60 : 0;
-      lamp.current.visible = loadout.headlamp && dark > 0.05;
+      lamp.current.visible = loadout.headlamp;
       lampTarget.position.set(p.x + Math.sin(p.heading) * 8, heightAt(p.x + Math.sin(p.heading) * 8, p.z + Math.cos(p.heading) * 8), p.z + Math.cos(p.heading) * 8);
       lampTarget.updateMatrixWorld();
       lamp.current.target = lampTarget;
@@ -194,14 +218,17 @@ export function Player() {
           {(['L', 'R'] as const).map((side) => (
             <Limb key={side} x={side === 'L' ? 0.11 : -0.11} y={-0.04} len={0.46} w={0.075} color={COLORS.pants} jointRef={side === 'L' ? thighL : thighR}>
               <Limb len={0.44} w={0.065} color={COLORS.pants} jointRef={side === 'L' ? shinL : shinR}>
-                <mesh position={[0, -0.03, 0.05]} castShadow>
-                  <boxGeometry args={[0.13, 0.12, 0.26]} />
-                  <meshStandardMaterial color={COLORS.boots} roughness={0.9} />
-                </mesh>
-                <mesh position={[0, -0.09, 0.05]}>
-                  <boxGeometry args={[0.14, 0.03, 0.28]} />
-                  <meshStandardMaterial color={COLORS.sole} />
-                </mesh>
+                {/* boot pivots at the ankle so the sole can follow the slope */}
+                <group ref={side === 'L' ? footL : footR}>
+                  <mesh position={[0, -0.03, 0.05]} castShadow>
+                    <boxGeometry args={[0.13, 0.12, 0.26]} />
+                    <meshStandardMaterial color={COLORS.boots} roughness={0.9} />
+                  </mesh>
+                  <mesh position={[0, -0.09, 0.05]}>
+                    <boxGeometry args={[0.14, 0.03, 0.28]} />
+                    <meshStandardMaterial color={COLORS.sole} />
+                  </mesh>
+                </group>
               </Limb>
             </Limb>
           ))}
@@ -327,8 +354,16 @@ export function CameraRig() {
     }
 
     if (g.phase === 'prep' || !p) {
-      // Slow orbit of the mountain behind the expedition planner.
-      const a = t * 0.025 + 0.6;
+      // Slow orbit of the mountain behind the expedition planner; drag to spin it, with a little
+      // inertia, and the idle drift eases back in a few seconds after letting go.
+      const now = performance.now() / 1000;
+      const idle = smoothstep(2.5, 5, now - prepOrbit.lastInput);
+      if (now - prepOrbit.lastInput > 0.08) {
+        prepOrbit.yaw += prepOrbit.vel * dt;
+        prepOrbit.vel *= Math.exp(-dt * 3);
+      }
+      prepOrbit.yaw += 0.025 * dt * idle;
+      const a = prepOrbit.yaw + 0.6;
       const far = wantOffset ? 1300 : 900;
       tmpPos.set(Math.sin(a) * far, 330 + Math.sin(t * 0.05) * 30, Math.cos(a) * far);
       tmpTarget.set(0, 170, 0);

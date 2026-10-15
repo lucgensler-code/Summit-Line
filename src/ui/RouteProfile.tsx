@@ -34,34 +34,37 @@ export function RouteProfile({ progress, width = 260, height = 70, labels = fals
       while (i < main.s.length - 1 && main.s[i] < s) i++;
       return i;
     };
-    // Collision-aware labels: try above the marker, then below, then a second row above.
-    const placed: { x0: number; x1: number; row: number }[] = [];
+    // Collision-aware labels. The profile always climbs to the right, so text placed above and to
+    // the LEFT of a marker, or below and to the RIGHT of it, never crosses the line. Try those
+    // slots in turn (plus a second, higher row) and keep the first one that overlaps no label.
+    // Markers are obstacles too, so no label covers another checkpoint's dot.
+    const placed: { x0: number; x1: number; y0: number; y1: number }[] = W.checkpoints.map((c) => {
+      const x = X(c.s);
+      const y = Y(feet[idxAt(c.s)]);
+      return { x0: x - 3.5, x1: x + 3.5, y0: y - 3.5, y1: y + 3.5 };
+    });
     const cps = W.checkpoints.map((c) => {
       const x = X(c.s);
       const y = Y(feet[idxAt(c.s)]);
       const text = SHORT[c.id] ?? c.name;
-      const w = text.length * 5.4 + 6;
-      let anchor: 'start' | 'middle' | 'end' = 'middle';
-      let x0 = x - w / 2;
-      if (x0 < 2) {
-        anchor = 'start';
-        x0 = x - 3;
-      } else if (x + w / 2 > width - 2) {
-        anchor = 'end';
-        x0 = x - w + 3;
-      }
-      const x1 = x0 + w;
-      const rows = [0, 1, 2];
-      let row = 0;
-      for (const r of rows) {
-        if (!placed.some((p) => p.row === r && !(x1 < p.x0 || x0 > p.x1))) {
-          row = r;
-          break;
-        }
-      }
-      placed.push({ x0, x1, row });
-      const ly = row === 0 ? y - 8 : row === 1 ? y + 15 : y - 19;
-      return { id: c.id, x, y, text, anchor, ly };
+      const w = text.length * 5.3 + 4;
+      const slots = [
+        { tx: x + 3, anchor: 'end' as const, ly: y - 7 },
+        { tx: x - 2, anchor: 'start' as const, ly: y + 13 },
+        { tx: x + 3, anchor: 'end' as const, ly: y - 18 },
+        { tx: x - 2, anchor: 'start' as const, ly: y + 24 },
+      ].map((sl) => {
+        // keep inside the chart
+        let tx = sl.tx;
+        if (sl.anchor === 'end' && tx - w < 2) tx = w + 2;
+        if (sl.anchor === 'start' && tx + w > width - 2) tx = width - 2 - w;
+        const x0 = sl.anchor === 'end' ? tx - w : tx;
+        return { ...sl, tx, x0, x1: x0 + w, y0: sl.ly - 9, y1: sl.ly + 2 };
+      });
+      const fits = (sl: (typeof slots)[number]) => sl.y0 > 0 && sl.y1 < height && !placed.some((p) => !(sl.x1 < p.x0 || sl.x0 > p.x1 || sl.y1 < p.y0 || sl.y0 > p.y1));
+      const pick = slots.find(fits) ?? slots[0];
+      placed.push(pick);
+      return { id: c.id, x, y, text, anchor: pick.anchor, tx: pick.tx, ly: pick.ly };
     });
     return { path: d, area, cps };
   }, [W, width, height, labels]);
@@ -80,7 +83,7 @@ export function RouteProfile({ progress, width = 260, height = 70, labels = fals
         <g key={c.id}>
           <circle cx={c.x} cy={c.y} r={3} fill={reached.includes(c.id) ? '#f0a35e' : '#1b2430'} stroke="#f0a35e" strokeWidth="1.4" />
           {labels && (
-            <text x={c.x} y={c.ly} textAnchor={c.anchor} fontSize="9.5" fontWeight="600" fill="#ffffff" stroke="rgba(12,16,22,0.85)" strokeWidth="3" paintOrder="stroke">
+            <text x={c.tx} y={c.ly} textAnchor={c.anchor} fontSize="9.5" fontWeight="600" fill="#ffffff" stroke="rgba(12,16,22,0.85)" strokeWidth="3" paintOrder="stroke">
               {c.text}
             </text>
           )}

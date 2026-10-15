@@ -72,6 +72,22 @@ export function MiniMap({ size = 84 }: { size?: number }) {
         ctx.arc(g.x, g.z, 2.6 / s, 0, Math.PI * 2);
         ctx.fill();
       }
+      // Off route: dashed guide line to the safe rejoin point (same colour as the HUD status).
+      const nav = runtime.nav;
+      if (nav.state !== 'on' && nav.safe) {
+        ctx.setLineDash([5 / s, 4 / s]);
+        ctx.lineWidth = 2.4 / s;
+        ctx.strokeStyle = nav.state === 'off' ? '#ff5a48' : '#ffc93a';
+        ctx.beginPath();
+        ctx.moveTo(p.x, p.z);
+        ctx.lineTo(nav.safe.x, nav.safe.z);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.fillStyle = ctx.strokeStyle;
+        ctx.beginPath();
+        ctx.arc(nav.safe.x, nav.safe.z, 3.4 / s, 0, Math.PI * 2);
+        ctx.fill();
+      }
       ctx.restore();
       // Player arrow (heading relative to view).
       ctx.save();
@@ -89,9 +105,9 @@ export function MiniMap({ size = 84 }: { size?: number }) {
       ctx.strokeStyle = '#e8562a';
       ctx.stroke();
       ctx.restore();
-      // Compass ring
-      ctx.lineWidth = 2;
-      ctx.strokeStyle = 'rgba(255,255,255,0.75)';
+      // Compass ring, tinted by trail status: green on trail, amber near, red off route.
+      ctx.lineWidth = 2.5;
+      ctx.strokeStyle = runtime.nav.state === 'on' ? 'rgba(111,224,143,0.9)' : runtime.nav.state === 'near' ? '#ffc93a' : '#ff5a48';
       ctx.beginPath();
       ctx.arc(R, R, R - 1.5, 0, Math.PI * 2);
       ctx.stroke();

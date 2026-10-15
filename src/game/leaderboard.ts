@@ -4,28 +4,34 @@
 //    readable by everyone who can open the game, writable only by that player (rules declared at
 //    publish). No credentials live in the client; the platform enforces who may write.
 
-import { maxPossibleScore } from './scoring';
+import { loadRecords } from './records';
+import { SCORE_RULES, SCORE_VERSION, maxPossibleScore, speedPoints, MIN_PLAUSIBLE_SECONDS } from './scoring';
 
 export interface LbEntry {
   id: string;
   name: string;
   score: number;
   realSeconds: number;
+  gems?: number;
   mountainName: string;
   routeName: string;
   date: string;
   mine: boolean;
+  /** recomputed from an earlier version's run (v0.3 pacing, no clean-climb data) */
+  migrated?: boolean;
 }
 
 export interface LbSubmission {
   name: string;
   score: number;
   realSeconds: number;
+  gems: number;
   mountainId: string;
   mountainName: string;
   routeId: string;
   routeName: string;
   gemsAvailable: number;
+  migrated?: boolean;
 }
 
 export type LbSort = 'score' | 'time';
@@ -38,6 +44,15 @@ export function cleanName(raw: string) {
     .toUpperCase()
     .replace(/[^A-Z0-9 ._-]/g, '')
     .trim()
+    .slice(0, 12);
+}
+/** While typing: same character set, but spaces are kept (trimmed only on submit). */
+export function typingName(raw: string) {
+  return raw
+    .toUpperCase()
+    .replace(/[^A-Z0-9 ._-]/g, '')
+    .replace(/^\s+/, '')
+    .replace(/\s{2,}/g, ' ')
     .slice(0, 12);
 }
 export function loadPlayerName() {
@@ -55,35 +70,85 @@ export function savePlayerName(n: string) {
   }
 }
 
-/** Basic sanity checks so an obviously impossible score is never stored or sent. */
+/**
+ * Sanity checks so an impossible score is never stored or sent. The score must sit inside the
+ * band the scoring model allows for that time and gem count (summit + speed for the time, plus at
+ * most the gems collected and the two style bonuses).
+ */
 export function validSubmission(s: LbSubmission) {
-  return (
-    !!cleanName(s.name) &&
-    Number.isFinite(s.score) &&
-    s.score >= 0 &&
-    s.score <= maxPossibleScore(s.gemsAvailable) &&
-    Number.isFinite(s.realSeconds) &&
-    s.realSeconds >= 120 &&
-    s.realSeconds < 6 * 3600
-  );
+  if (!cleanName(s.name)) return false;
+  if (![s.score, s.realSeconds, s.gems, s.gemsAvailable].every(Number.isFinite)) return false;
+  if (s.realSeconds < MIN_PLAUSIBLE_SECONDS || s.realSeconds >= 6 * 3600) return false;
+  if (s.gems < 0 || s.gems > s.gemsAvailable) return false;
+  const floor = SCORE_RULES.summit + speedPoints(s.realSeconds);
+  const ceil = floor + s.gems * SCORE_RULES.perGem + SCORE_RULES.cleanClimb + SCORE_RULES.register;
+  return s.score >= floor - 1 && s.score <= ceil + 1 && s.score <= maxPossibleScore(s.gemsAvailable);
 }
 
 // ------------------------------------------------------------------ local backend
 
-const LOCAL_KEY = 'summitline.highscores.v1';
+const LOCAL_KEY = 'summitline.highscores.v2';
+const LOCAL_KEY_V1 = 'summitline.highscores.v1';
 interface LocalRow extends Omit<LbEntry, 'mine'> {
   routeKey: string;
+  scoreVersion: number;
+  /** already merged into the shared board */
+  synced?: boolean;
 }
-function loadLocal(): LocalRow[] {
+function readJson<T>(key: string): T[] {
   try {
-    const v = JSON.parse(localStorage.getItem(LOCAL_KEY) || '[]');
+    const v = JSON.parse(localStorage.getItem(key) || '[]');
     return Array.isArray(v) ? v : [];
   } catch {
     return [];
   }
 }
+function saveLocal(rows: LocalRow[]) {
+  // Keep the board small: best 60 by score plus best 60 by time.
+  const byScore = [...rows].sort((a, b) => b.score - a.score).slice(0, 60);
+  const byTime = [...rows].sort((a, b) => a.realSeconds - b.realSeconds).slice(0, 60);
+  const keep = new Map([...byScore, ...byTime].map((r) => [r.id, r]));
+  try {
+    localStorage.setItem(LOCAL_KEY, JSON.stringify([...keep.values()]));
+  } catch {
+    /* ignore */
+  }
+}
+
+/**
+ * One-time migration of v0.3 high scores (scoring model v1) to the v2 model: the score is
+ * recomputed from the run's time, and its gems / register come from the matching expedition-log
+ * entry. Clean-climb data didn't exist then, so migrated runs never get that bonus.
+ */
+function migrateV1() {
+  let v1: (Omit<LocalRow, 'scoreVersion'> & { routeKey: string })[];
+  try {
+    if (localStorage.getItem(LOCAL_KEY) !== null) return;
+    v1 = readJson(LOCAL_KEY_V1);
+  } catch {
+    return;
+  }
+  const recs = loadRecords();
+  const out: LocalRow[] = v1.map((r) => {
+    const rec = recs.reduce<(typeof recs)[number] | undefined>(
+      (best, x) => (Math.abs(x.realSeconds - r.realSeconds) < 1.5 && (!best || Math.abs(x.realSeconds - r.realSeconds) < Math.abs(best.realSeconds - r.realSeconds)) ? x : best),
+      undefined,
+    );
+    const gems = Math.min(rec?.gems.total ?? 0, 11);
+    const score = SCORE_RULES.summit + speedPoints(r.realSeconds) + gems * SCORE_RULES.perGem + (rec?.registerSigned ? SCORE_RULES.register : 0);
+    return { ...r, score, gems, scoreVersion: SCORE_VERSION, migrated: true };
+  });
+  saveLocal(out);
+}
+
+function loadLocal(): LocalRow[] {
+  migrateV1();
+  return readJson<LocalRow>(LOCAL_KEY).filter((r) => r.scoreVersion === SCORE_VERSION);
+}
 
 export const routeKey = (mountainId: string, routeId: string) => `${mountainId}_${routeId}`.replace(/[^A-Za-z0-9_-]/g, '-');
+
+const newId = () => `${Date.now().toString(36)}${Math.floor(Math.random() * 1e6).toString(36)}`;
 
 export const localBoard = {
   top(rk: string, sort: LbSort, n = 25): LbEntry[] {
@@ -99,29 +164,29 @@ export const localBoard = {
   add(s: LbSubmission): { id: string; rankScore: number; rankTime: number } {
     const rk = routeKey(s.mountainId, s.routeId);
     const row: LocalRow = {
-      id: `${Date.now().toString(36)}${Math.floor(Math.random() * 1e5).toString(36)}`,
+      id: newId(),
       name: cleanName(s.name),
       score: Math.round(s.score),
       realSeconds: s.realSeconds,
+      gems: s.gems,
       mountainName: s.mountainName,
       routeName: s.routeName,
       date: new Date().toISOString(),
       routeKey: rk,
+      scoreVersion: SCORE_VERSION,
     };
-    const all = loadLocal();
-    all.push(row);
-    // Keep the board small: best 60 by score plus best 60 by time.
-    const byScore = [...all].sort((a, b) => b.score - a.score).slice(0, 60);
-    const byTime = [...all].sort((a, b) => a.realSeconds - b.realSeconds).slice(0, 60);
-    const keep = new Map([...byScore, ...byTime].map((r) => [r.id, r]));
-    try {
-      localStorage.setItem(LOCAL_KEY, JSON.stringify([...keep.values()]));
-    } catch {
-      /* ignore */
-    }
+    saveLocal([...loadLocal(), row]);
     const rs = localBoard.top(rk, 'score', 1000).findIndex((r) => r.id === row.id) + 1;
     const rt = localBoard.top(rk, 'time', 1000).findIndex((r) => r.id === row.id) + 1;
     return { id: row.id, rankScore: rs, rankTime: rt };
+  },
+  /** Runs not yet merged into the shared board (saved offline, or before it was reachable). */
+  unsynced(rk: string) {
+    return loadLocal().filter((r) => r.routeKey === rk && !r.synced);
+  },
+  markSynced(ids: string[]) {
+    const set = new Set(ids);
+    saveLocal(loadLocal().map((r) => (set.has(r.id) ? { ...r, synced: true } : r)));
   },
 };
 
@@ -178,62 +243,109 @@ export function sharedBoard() {
   return sharedInit;
 }
 
-const F = (rk: string, f: string) => `${rk}__${f}`;
+// Shared layout (v2): one document per player, `lb/<player id>`. For each route + scoring version
+// it holds the player's best runs (top 5 by score ∪ top 5 by time) plus two top-level "best"
+// fields the board orders by. The board flattens runs, so a player's several good climbs can all
+// appear — not just one per player. v1 fields (v0.3) are left untouched in the same document.
+const RUNS_KEEP = 5;
+const vkey = (rk: string) => `${rk}_s${SCORE_VERSION}`;
+const F = (rk: string, f: string) => `${vkey(rk)}__${f}`;
+
+interface SharedRun {
+  id: string;
+  name: string;
+  score: number;
+  t: number;
+  gems: number;
+  date: string;
+  m?: 1;
+}
+
+function isRun(r: unknown): r is SharedRun {
+  const v = r as SharedRun;
+  return !!v && typeof v.id === 'string' && typeof v.score === 'number' && typeof v.t === 'number';
+}
 
 export async function sharedTop(rk: string, sort: LbSort, n = 25): Promise<LbEntry[] | null> {
   const s = await sharedBoard();
   if (!s) return null;
   const field = sort === 'score' ? F(rk, 'score') : F(rk, 'time');
-  const snap = await s.db.collection('lb').orderBy(field, sort === 'score' ? 'desc' : 'asc').limit(n).get();
+  const snap = await s.db.collection('lb').orderBy(field, sort === 'score' ? 'desc' : 'asc').limit(60).get();
   const out: LbEntry[] = [];
   for (const d of snap.docs) {
     const v = d.data();
     if (!v || typeof v[field] !== 'number') continue;
-    const best = sort === 'score' ? 'score' : 'time';
-    out.push({
-      id: d.id,
-      name: cleanName(String(v.name ?? '')) || '???',
-      score: Number(v[F(rk, best === 'score' ? 'score' : 'timeScore')] ?? 0),
-      realSeconds: Number(v[F(rk, best === 'score' ? 'scoreTime' : 'time')] ?? 0),
-      mountainName: String(v[F(rk, 'mountain')] ?? ''),
-      routeName: String(v[F(rk, 'route')] ?? ''),
-      date: String(v[F(rk, best === 'score' ? 'scoreDate' : 'timeDate')] ?? ''),
-      mine: d.id === s.uid,
-    });
+    const runs = Array.isArray(v[F(rk, 'runs')]) ? (v[F(rk, 'runs')] as unknown[]).filter(isRun) : [];
+    for (const r of runs) {
+      out.push({
+        id: `${d.id}:${r.id}`,
+        name: cleanName(String(r.name ?? v.name ?? '')) || '???',
+        score: Math.round(r.score),
+        realSeconds: r.t,
+        gems: r.gems,
+        mountainName: String(v[F(rk, 'mountain')] ?? ''),
+        routeName: String(v[F(rk, 'route')] ?? ''),
+        date: String(r.date ?? ''),
+        mine: d.id === s.uid,
+        migrated: r.m === 1,
+      });
+    }
   }
-  return out;
+  out.sort((a, b) => (sort === 'score' ? b.score - a.score || a.realSeconds - b.realSeconds : a.realSeconds - b.realSeconds || b.score - a.score));
+  return out.slice(0, n);
 }
 
-/** Merge this climb into the player's single shared document (keeps best score and best time). */
-export async function sharedSubmit(sub: LbSubmission): Promise<'ok' | 'unavailable' | 'denied'> {
+function keepRuns(runs: SharedRun[]) {
+  const byScore = [...runs].sort((a, b) => b.score - a.score).slice(0, RUNS_KEEP);
+  const byTime = [...runs].sort((a, b) => a.t - b.t).slice(0, RUNS_KEEP);
+  return [...new Map([...byScore, ...byTime].map((r) => [r.id, r])).values()];
+}
+
+/**
+ * Merge runs into the player's shared document. Pass the run just finished plus any local runs
+ * that never reached the board (offline, or saved before the board was reachable) — this is how
+ * local scores migrate. Duplicate runs (same id, or same time + score) are merged once.
+ */
+export async function sharedSubmit(sub: LbSubmission, pending: Omit<LbEntry, 'mine'>[] = []): Promise<'ok' | 'unavailable' | 'denied'> {
   const s = await sharedBoard();
   if (!s) return 'unavailable';
   if (s.canWrite === false) return 'denied';
-  if (!validSubmission(sub)) return 'denied';
   const rk = routeKey(sub.mountainId, sub.routeId);
+  const now = new Date().toISOString();
+  const incoming: SharedRun[] = [];
+  const add = (x: LbSubmission, id: string, date: string) => {
+    if (!validSubmission(x)) return;
+    incoming.push({ id, name: cleanName(x.name), score: Math.round(x.score), t: Math.round(x.realSeconds * 10) / 10, gems: x.gems, date, ...(x.migrated ? { m: 1 as const } : {}) });
+  };
+  add(sub, newId(), now);
+  for (const p of pending) add({ ...sub, name: p.name, score: p.score, realSeconds: p.realSeconds, gems: p.gems ?? 0, migrated: p.migrated }, p.id, p.date || now);
+  if (!incoming.length) return 'denied';
   const ref = s.db.doc(`lb/${s.uid}`);
   try {
     const cur = await ref.get();
     const v: Record<string, unknown> = { ...(cur.exists ? cur.data() : {}) };
-    const now = new Date().toISOString();
+    const prev = Array.isArray(v[F(rk, 'runs')]) ? (v[F(rk, 'runs')] as unknown[]).filter(isRun) : [];
+    const seen = new Set(prev.map((r) => `${r.t}|${r.score}`));
+    const ids = new Set(prev.map((r) => r.id));
+    const merged = [...prev];
+    for (const r of incoming) {
+      if (ids.has(r.id) || seen.has(`${r.t}|${r.score}`)) continue;
+      merged.push(r);
+      ids.add(r.id);
+      seen.add(`${r.t}|${r.score}`);
+    }
+    const runs = keepRuns(merged);
     v.name = cleanName(sub.name);
-    v.v = 1;
+    v.v = 2;
     v[F(rk, 'mountain')] = sub.mountainName;
     v[F(rk, 'route')] = sub.routeName;
-    if (typeof v[F(rk, 'score')] !== 'number' || sub.score > (v[F(rk, 'score')] as number)) {
-      v[F(rk, 'score')] = Math.round(sub.score);
-      v[F(rk, 'scoreTime')] = Math.round(sub.realSeconds);
-      v[F(rk, 'scoreDate')] = now;
-    }
-    if (typeof v[F(rk, 'time')] !== 'number' || sub.realSeconds < (v[F(rk, 'time')] as number)) {
-      v[F(rk, 'time')] = Math.round(sub.realSeconds);
-      v[F(rk, 'timeScore')] = Math.round(sub.score);
-      v[F(rk, 'timeDate')] = now;
-    }
+    v[F(rk, 'runs')] = runs;
+    v[F(rk, 'score')] = Math.max(...runs.map((r) => r.score));
+    v[F(rk, 'time')] = Math.min(...runs.map((r) => r.t));
     await ref.set(v);
     return 'ok';
   } catch (e) {
     const code = (e as { code?: string })?.code;
-    return code === 'invalid_argument' ? 'denied' : 'unavailable';
+    return code === 'invalid_argument' || code === 'permission_denied' ? 'denied' : 'unavailable';
   }
 }

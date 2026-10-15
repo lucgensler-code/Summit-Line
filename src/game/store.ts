@@ -3,6 +3,7 @@ import { startAudio } from './audio';
 import { clearInput } from './input';
 import { addRecord, type BestKind, type ExpeditionRecord } from './records';
 import { computeScore, type Score } from './scoring';
+import { createNav, type NavState, type SafePoint } from './navigation';
 import { localBoard, routeKey } from './leaderboard';
 import { ACTIVE_MOUNTAIN, ACTIVE_ROUTE, type GemKind } from './routes';
 import { DEFAULT_LOADOUT, clockHour, createPlayer, rating, type Loadout, type PlayerState } from './sim';
@@ -60,6 +61,12 @@ export interface HudSnapshot {
   windMph: number;
   weather: string;
   consumeKind: 'eat' | 'drink' | null;
+  /** v0.4 navigation */
+  trailState: 'on' | 'near' | 'off';
+  place: string;
+  /** way back to a safe trail point when not on the trail */
+  guide: { distFt: number; card: string; /** screen-relative arrow angle, degrees clockwise */ rel: number } | null;
+  realSeconds: number;
 }
 
 export interface Summary {
@@ -108,6 +115,10 @@ export const runtime: {
   registerSigned: boolean;
   cameraUsed: boolean;
   fx: Burst[];
+  /** trail status (hysteresis) and the current safe rejoin point, shared by HUD and minimap */
+  nav: NavState & { safe: SafePoint | null };
+  /** signs / kiosk read this climb */
+  readSigns: Set<string>;
 } = {
   player: null,
   loadout: DEFAULT_LOADOUT,
@@ -118,6 +129,8 @@ export const runtime: {
   registerSigned: false,
   cameraUsed: false,
   fx: [],
+  nav: { ...createNav(), safe: null },
+  readSigns: new Set(),
 };
 
 const HINT_KEY = 'summitline.cameraHintSeen';
@@ -169,8 +182,9 @@ interface GameStore {
 }
 
 /** True while a full-screen overlay is open — the simulation (and any boost timer) is paused. */
-export function overlayOpen(g: { mapOpen: boolean; logOpen: boolean; registerOpen: boolean; lbOpen: boolean }) {
-  return g.mapOpen || g.logOpen || g.registerOpen || g.lbOpen;
+/** Reading a sign or the kiosk counts too: the expedition clock never runs while text is open. */
+export function overlayOpen(g: { mapOpen: boolean; logOpen: boolean; registerOpen: boolean; lbOpen: boolean; reading: unknown }) {
+  return g.mapOpen || g.logOpen || g.registerOpen || g.lbOpen || !!g.reading;
 }
 
 // Notification queue: one message at a time; critical ones interrupt.
@@ -187,6 +201,8 @@ function resetRun(loadout: Loadout) {
   runtime.runId++;
   runtime.summitAt = 0;
   runtime.registerSigned = false;
+  runtime.nav = { ...createNav(), safe: null };
+  runtime.readSigns = new Set();
   runtime.fx.length = 0;
   runtime.cam.yaw = p.heading + Math.PI;
   runtime.cam.pitch = 0.3;
@@ -312,17 +328,13 @@ export const useGame = create<GameStore>((set, get) => ({
     };
     const score = computeScore({
       realSeconds: p.realTime,
-      routeMiles: ACTIVE_ROUTE.miles,
-      distanceMi: rec.distanceMi,
-      waterUsedL: p.waterUsed,
-      foodUsed: p.foodUsed,
-      finalMaxStamina: p.maxStamina,
       exhaustions: p.exhaustions,
       gems: gems.total,
       gemsAvailable: W.gems.length,
       registerSigned: runtime.registerSigned,
     });
     rec.score = score.total;
+    rec.scoreVersion = score.version;
     const rk = routeKey(ACTIVE_MOUNTAIN.id, ACTIVE_ROUTE.id);
     const prevBest = localBoard.top(rk, 'score', 1)[0]?.score ?? 0;
     const qualifies = localBoard.qualifies(rk, score.total);

@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { useGame, runtime } from './game/store';
 import { useDesktopControls } from './game/useControls';
 import { GameCanvas } from './scene/GameCanvas';
+import { FpsOverlay } from './scene/Performance';
 import { HUD } from './ui/HUD';
 import { PauseMenu } from './ui/PauseMenu';
 import { PrepScreen } from './ui/PrepScreen';
@@ -70,6 +71,7 @@ export function App() {
       {/* Overlays render last so nothing (e.g. the summit gesture layer) can sit on top of them. */}
       {logOpen && <ExpeditionLog />}
       {lbOpen && <Leaderboard />}
+      <FpsOverlay />
     </div>
   );
 }

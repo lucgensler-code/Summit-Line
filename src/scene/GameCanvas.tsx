@@ -1,8 +1,8 @@
 import { Canvas } from '@react-three/fiber';
-import { AdaptiveDpr } from '@react-three/drei';
 import * as THREE from 'three';
 import { Atmosphere, Clouds, DistantLands, Spindrift } from './Environment';
 import { GameLoop } from './GameLoop';
+import { PerfGovernor } from './Performance';
 import { Gems } from './Gems';
 import { Wildlife } from './Wildlife';
 import { Landmarks } from './Landmarks';
@@ -14,7 +14,7 @@ export function GameCanvas() {
   return (
     <Canvas
       shadows={{ type: THREE.PCFShadowMap }}
-      dpr={[1, 1.75]}
+      dpr={1}
       gl={{ antialias: true, powerPreference: 'high-performance' }}
       camera={{ fov: 55, near: 0.2, far: 9000, position: [600, 300, 600] }}
       onCreated={({ gl }) => {
@@ -23,7 +23,7 @@ export function GameCanvas() {
         (window as unknown as { __summitGL: THREE.WebGLRenderer }).__summitGL = gl;
       }}
     >
-      <AdaptiveDpr pixelated />
+      <PerfGovernor />
       <Atmosphere />
       <DistantLands />
       <Clouds />
