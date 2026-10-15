@@ -81,11 +81,44 @@ status panel. Add `?touch` to the URL to force touch controls on.
 - **Summit celebration**: a 48 s 360° orbit through afternoon, sunset, a starry night and
   sunrise, a compact summary, and *Enjoy the View* mode.
 
+## v0.3 additions
+
+- **Momentum.** Movement is about 15% faster than v0.2: an efficient climb takes about 6.6 minutes
+  (`npm run test:sim`, "efficient player"). Eat and drink while walking or jogging; water gives an
+  instant +18% stamina, food restores the energy cap, and resting only restores current stamina
+  (the clock runs 4×). A red-gem boost also makes effort 25% lighter.
+- **Gems.** Gems are small crystal clusters growing from rock. They are placed as green → red pairs
+  before climbs and shortcuts, so a boost is picked up fresh, and the boost timer pauses in menus.
+- **HUD.** A compact navigation module (heading-up mini-map with compass ring, summit bearing,
+  elevation, distance, progress and objective) opens the full map. A small time chip has a pause
+  icon. Notifications show one at a time, in priority order. Sign text and hints appear only at the
+  top edge.
+- **Touch.** One full-screen gesture surface handles the joystick zone, look drag, and pinch
+  anywhere, including a second finger that lands in the joystick zone.
+- **Grounding.** Each foot samples the terrain under it and the knee folds to absorb slopes. The
+  rest pose is now a grounded kneel, and there is an eat/drink arm gesture.
+- **Register.** A real register interface: sign in (stored on this device), read earlier entries,
+  and earn a +150 point style bonus.
+- **Scoring** (`src/game/scoring.ts`): summit 5,000 + speed (up to 3,000) + resources (up to
+  1,000) + route (up to 1,000) + 50 per gem + style (register, never exhausted).
+- **High scores** (`src/game/leaderboard.ts`): arcade-style name entry, with Highest Scores and
+  Fastest Summits tabs. Scores are kept on this device and, in the published artifact, on a
+  shared board using the artifact's `db` store. Each player has one document (`lb/<player id>`)
+  that only they can write and everyone can read, and no credentials are in the client.
+- **Units** (`src/game/units.ts`): US customary by default (ft, mi, lb, fl oz, °F, mph), with
+  a Metric option in the pause menu. Values are stored internally in SI units, so old saves still
+  read correctly.
+- **World.** Far terrain continues from the playable mesh's own edge vertices into foothills and
+  distant peaks, with no map edge. Fallen logs, ferns, rock spires, snowdrifts, crater ice,
+  songbirds, ravens and raptors are new.
+- **Summit.** A 64 s 360° orbit through a continuous day/night cycle (the sun and moon key light
+  cross-fade, and the sky palette eases and wraps at midnight), then a held alpenglow.
+
 ## Project layout
 
 ```
-src/game/    world gen, route data, gameplay sim, records, input, store, audio, summit timeline
+src/game/    world gen, routes, sim, scoring, leaderboard, records, units, weather, input, store, audio
 src/scene/   R3F components: terrain, trail, vegetation, landmarks, sky/lighting, player, camera
-src/ui/      prep screen, HUD, map, expedition log, pause menu, summit summary, touch controls
+src/ui/      prep, HUD + mini-map, map, register, leaderboard, log, pause, summit, touch gestures
 scripts/     simulate-ascent.ts (headless bots), playtest.mjs (Playwright smoke test)
 ```

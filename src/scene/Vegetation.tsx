@@ -236,3 +236,61 @@ export function TrailMarkers() {
     </group>
   );
 }
+
+/** Fallen logs, ferns, wind-carved rock spires, snowdrifts and crater ice — all instanced. */
+export function Ecology() {
+  const W = getWorld();
+  const g = useMemo(() => {
+    const log = merge([
+      tint(new THREE.CylinderGeometry(0.32, 0.38, 6, 7).rotateZ(Math.PI / 2).translate(0, 0.3, 0), '#6a4a32'),
+      tint(new THREE.CylinderGeometry(0.33, 0.33, 0.05, 7).rotateZ(Math.PI / 2).translate(3.02, 0.3, 0), '#b08a5a'),
+      tint(new THREE.CylinderGeometry(0.06, 0.08, 1.1, 4).rotateZ(0.9).translate(-1.2, 0.7, 0.2), '#5a3d28'),
+    ]);
+    const fern = jitter(new THREE.ConeGeometry(0.7, 0.55, 6, 1, true).translate(0, 0.27, 0), 0.18, 77);
+    const spire = jitter(new THREE.CylinderGeometry(0.25, 0.85, 3.2, 6, 3).translate(0, 1.4, 0), 0.35, 91);
+    const drift = jitter(new THREE.SphereGeometry(1, 9, 5, 0, Math.PI * 2, 0, Math.PI / 2), 0.18, 101);
+    const ice = merge(
+      [0, 1, 2, 3].map((i) =>
+        tint(
+          jitter(new THREE.OctahedronGeometry(0.35 + i * 0.07, 0).scale(0.6, 2.2, 0.6), 0.08, 120 + i)
+            .rotateZ((i - 1.5) * 0.35)
+            .rotateX((i % 2 ? 1 : -1) * 0.25)
+            .translate((i - 1.5) * 0.35, 0.45, (i % 2) * 0.3),
+          '#ffffff',
+        ),
+      ),
+    );
+    return { log, fern, spire, drift, ice };
+  }, []);
+  const mats = useMemo(
+    () => ({
+      log: new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 1 }),
+      fern: new THREE.MeshStandardMaterial({ flatShading: true, roughness: 1, side: THREE.DoubleSide }),
+      spire: new THREE.MeshStandardMaterial({ color: '#3d3434', flatShading: true, roughness: 0.95 }),
+      drift: new THREE.MeshStandardMaterial({ color: '#f2f7fc', roughness: 0.9 }),
+      ice: new THREE.MeshStandardMaterial({ vertexColors: true, color: '#bfe4ff', roughness: 0.12, metalness: 0.05, transparent: true, opacity: 0.88, emissive: '#2a5a80', emissiveIntensity: 0.25, flatShading: true }),
+    }),
+    [],
+  );
+  const fernCols = useMemo(() => [new THREE.Color('#3f7a2c'), new THREE.Color('#5a8a30'), new THREE.Color('#2f6630')], []);
+  const placeLog = useMemo(() => (it: Scatter) => ({ y: it.y - 0.05, sx: it.s, sy: it.s, sz: it.s }), []);
+  const placeFern = useMemo(
+    () => (it: Scatter) => {
+      col.copy(fernCols[Math.floor(it.tint * 3) % 3]);
+      return { y: it.y - 0.05, sx: it.s * 1.3, sy: it.s, sz: it.s * 1.3, color: col };
+    },
+    [fernCols],
+  );
+  const placeSpire = useMemo(() => (it: Scatter) => ({ y: it.y - 0.4, sx: it.s * 0.8, sy: it.s * (0.9 + it.tint * 0.6), sz: it.s * 0.8, rz: (it.tint - 0.5) * 0.3 }), []);
+  const placeDrift = useMemo(() => (it: Scatter) => ({ y: it.y - 0.25, sx: it.s * 1.8, sy: it.s * 0.32, sz: it.s, rx: 0 }), []);
+  const placeIce = useMemo(() => (it: Scatter) => ({ y: it.y - 0.2, sx: it.s, sy: it.s, sz: it.s }), []);
+  return (
+    <group>
+      <Chunked items={W.logs} geometry={g.log} material={mats.log} place={placeLog} cast receive />
+      <Chunked items={W.ferns} geometry={g.fern} material={mats.fern} place={placeFern} receive />
+      <Chunked items={W.spires} geometry={g.spire} material={mats.spire} place={placeSpire} cast receive />
+      <Chunked items={W.drifts} geometry={g.drift} material={mats.drift} place={placeDrift} receive />
+      <Chunked items={W.ice} geometry={g.ice} material={mats.ice} place={placeIce} cast />
+    </group>
+  );
+}

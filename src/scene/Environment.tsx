@@ -5,7 +5,7 @@ import { fbm, mulberry32, smoothstep } from '../game/noise';
 import { clockHour, daylight } from '../game/sim';
 import { summitCinematic } from '../game/cinematic';
 import { runtime, useGame } from '../game/store';
-import { elevationFt } from '../game/world';
+import { elevationFt, farHeight } from '../game/world';
 import { merge, tint } from './Vegetation';
 
 // ---------------------------------------------------------------------------------------------
@@ -31,9 +31,10 @@ const KEYS: Key[] = [
   { h: 8.5, top: '#2f74d0', horizon: '#c9e2f4', sun: '#fff0d4', sunI: 3.1, hemiSky: '#bcd6f4', hemiGround: '#5e4d38', hemiI: 1.3, fog: 1 },
   { h: 12, top: '#246dd0', horizon: '#cfe5f6', sun: '#ffffff', sunI: 3.2, hemiSky: '#c4dcf6', hemiGround: '#62513d', hemiI: 1.35, fog: 1 },
   { h: 15.5, top: '#3474c6', horizon: '#ecd8b8', sun: '#ffe2b0', sunI: 2.8, hemiSky: '#c6d2e8', hemiGround: '#604c36', hemiI: 1.3, fog: 0.85 },
+  { h: 17.2, top: '#3566b4', horizon: '#f7c47e', sun: '#ffc070', sunI: 2.4, hemiSky: '#c4c6d8', hemiGround: '#5e4632', hemiI: 1.2, fog: 0.8 },
   { h: 18.3, top: '#253d80', horizon: '#ff8a52', sun: '#ff7a45', sunI: 1.5, hemiSky: '#a892c0', hemiGround: '#40302a', hemiI: 1.1, fog: 0.75 },
   { h: 19.2, top: '#16225a', horizon: '#c0607a', sun: '#d06a7a', sunI: 0.7, hemiSky: '#6a62a0', hemiGround: '#221c24', hemiI: 0.95, fog: 0.72 },
-  { h: 20.2, top: '#060c26', horizon: '#2a2c56', sun: '#7d8fc4', sunI: 0.38, hemiSky: '#46558a', hemiGround: '#151820', hemiI: 0.85, fog: 0.7 },
+  { h: 20.2, top: '#060c26', horizon: '#232a50', sun: '#7d8fc4', sunI: 0.38, hemiSky: '#46558a', hemiGround: '#151820', hemiI: 0.85, fog: 0.72 },
 ];
 
 const cB = new THREE.Color();
@@ -52,11 +53,24 @@ const PAL = {
 /** Interpolated sky/light palette for a clock hour (any value; wraps at 24 h). Reuses objects. */
 function samplePalette(hour: number) {
   hour = ((hour % 24) + 24) % 24;
-  let i = 0;
-  while (i < KEYS.length - 2 && hour > KEYS[i + 1].h) i++;
-  const a = KEYS[i];
-  const b = KEYS[i + 1];
-  const t = THREE.MathUtils.clamp((hour - a.h) / (b.h - a.h), 0, 1);
+  // Cyclic: between the last key (evening) and the first (pre-dawn) we interpolate across midnight.
+  let a = KEYS[KEYS.length - 1];
+  let b = KEYS[0];
+  let ah = a.h - 24;
+  let bh = b.h;
+  let hh = hour > a.h ? hour - 24 : hour;
+  for (let i = 0; i < KEYS.length - 1; i++) {
+    if (hour >= KEYS[i].h && hour <= KEYS[i + 1].h) {
+      a = KEYS[i];
+      b = KEYS[i + 1];
+      ah = a.h;
+      bh = b.h;
+      hh = hour;
+      break;
+    }
+  }
+  const lin = THREE.MathUtils.clamp((hh - ah) / (bh - ah), 0, 1);
+  const t = lin * lin * (3 - 2 * lin); // ease between keys: no visible kinks
   const mix = (x: string, y: string, out: THREE.Color) => out.set(x).lerp(cB.set(y), t);
   mix(a.top, b.top, PAL.top);
   mix(a.horizon, b.horizon, PAL.horizon);
@@ -70,17 +84,25 @@ function samplePalette(hour: number) {
 }
 
 /** Sun direction: rises in the east, arcs through the south, sets in the west. */
+const MOON = new THREE.Vector3(-0.45, 0.75, 0.5).normalize();
+const SUNV = new THREE.Vector3();
+
+/** Raw sun elevation (radians, negative below the horizon) for a clock hour. */
+export function sunElevation(hour: number) {
+  hour = ((hour % 24) + 24) % 24;
+  const t = (hour - 6) / 13;
+  return t >= 0 && t <= 1 ? Math.sin(Math.PI * t) * 1.05 : -0.3;
+}
+
+/** Key-light direction: the sun by day, cross-fading continuously to moonlight at night. */
 export function sunDirection(hour: number, out: THREE.Vector3) {
   hour = ((hour % 24) + 24) % 24;
   const t = (hour - 6) / 13; // 0 sunrise .. 1 sunset
-  const az = Math.PI * t; // 0 = east, π/2 = south, π = west
-  const elev = Math.sin(Math.PI * t) * 1.05;
-  if (elev < 0.08) {
-    // Moonlight from the high south-west keeps the night readable.
-    return out.set(-0.45, 0.75, 0.5).normalize();
-  }
-  out.set(Math.cos(az) * Math.cos(elev), Math.sin(elev), Math.sin(az) * Math.cos(elev));
-  return out.normalize();
+  const az = Math.PI * THREE.MathUtils.clamp(t, -0.08, 1.08); // 0 = east, π/2 = south, π = west
+  const elev = Math.max(sunElevation(hour), 0.02);
+  SUNV.set(Math.cos(az) * Math.cos(elev), Math.sin(elev), Math.sin(az) * Math.cos(elev)).normalize();
+  const w = smoothstep(-0.02, 0.16, sunElevation(hour));
+  return out.copy(MOON).lerp(SUNV, w).normalize();
 }
 
 export function currentHour() {
@@ -214,7 +236,7 @@ export function Atmosphere() {
       u.uHorizon.value.copy(pal.horizon);
       u.uSun.value.copy(pal.sun);
       u.uSunDir.value.copy(dir);
-      u.uSunVis.value = light > 0.05 ? 1 : 0;
+      u.uSunVis.value = smoothstep(-0.04, 0.05, sunElevation(hour));
       u.uStars.value = 1 - smoothstep(0, 0.35, light);
     }
   });
@@ -289,14 +311,11 @@ export function DistantLands() {
   return (
     <group>
       {PEAKS.map((p, i) => (
-        <mesh key={i} geometry={geos[i]} position={[p.x, -6, p.z]}>
+        <mesh key={i} geometry={geos[i]} position={[p.x, farHeight(p.x, p.z) - 18, p.z]}>
           <meshStandardMaterial vertexColors flatShading roughness={1} />
         </mesh>
       ))}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -2.2, 0]} receiveShadow>
-        <circleGeometry args={[7000, 48]} />
-        <meshStandardMaterial color="#2f3d2a" roughness={1} />
-      </mesh>
+
     </group>
   );
 }
@@ -356,8 +375,12 @@ export function Spindrift() {
     const pts = ref.current;
     if (!pts || !matRef.current) return;
     const ft = p ? elevationFt(p.y) : 0;
-    const amount = useGame.getState().phase === 'prep' ? 0 : smoothstep(8600, 9800, ft);
+    // Faint drifting motes in the forest and meadows, building to spindrift near the summit.
+    const high = smoothstep(8600, 9800, ft);
+    const amount = useGame.getState().phase === 'prep' ? 0 : 0.22 + high * 0.78;
     matRef.current.opacity = amount * 0.85;
+    matRef.current.size = 0.06 + high * 0.04;
+    matRef.current.color.set(high > 0.5 ? '#ffffff' : '#fff1c4');
     pts.visible = amount > 0.01;
     if (!pts.visible || !p) return;
     const t = clock.elapsedTime;

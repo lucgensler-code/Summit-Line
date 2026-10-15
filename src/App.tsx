@@ -9,6 +9,8 @@ import { SummitScreen } from './ui/SummitScreen';
 import { TouchControls, isTouchDevice } from './ui/TouchControls';
 import { MapOverlay } from './ui/MapOverlay';
 import { ExpeditionLog } from './ui/ExpeditionLog';
+import { Leaderboard } from './ui/Leaderboard';
+import { RegisterModal } from './ui/RegisterModal';
 import { getWorld } from './game/world';
 
 declare global {
@@ -23,6 +25,8 @@ export function App() {
   const mapOpen = useGame((s) => s.mapOpen);
   const logOpen = useGame((s) => s.logOpen);
   const viewMode = useGame((s) => s.viewMode);
+  const registerOpen = useGame((s) => s.registerOpen);
+  const lbOpen = useGame((s) => s.lbOpen);
   useDesktopControls(host);
 
   useEffect(() => {
@@ -36,7 +40,7 @@ export function App() {
     const block = (e: Event) => e.preventDefault();
     const blockTouch = (e: TouchEvent) => {
       if (e.touches.length > 1) return e.preventDefault();
-      const scrollable = (e.target as Element | null)?.closest?.('.modal, .summary-card, .prep-panel, .map-sheet');
+      const scrollable = (e.target as Element | null)?.closest?.('.modal, .summary-card, .prep-panel, .map-sheet, .lb-table-wrap');
       if (!scrollable && useGame.getState().phase !== 'prep') e.preventDefault();
     };
     document.addEventListener('gesturestart', block);
@@ -59,9 +63,12 @@ export function App() {
       {phase === 'playing' && !mapOpen && <TouchControls />}
       {(phase === 'playing' || phase === 'paused') && <HUD />}
       {mapOpen && (phase === 'playing' || phase === 'paused') && <MapOverlay />}
-      {logOpen && <ExpeditionLog />}
       {phase === 'paused' && <PauseMenu />}
       {phase === 'summit' && <SummitScreen />}
+      {registerOpen && phase === 'playing' && <RegisterModal />}
+      {/* Overlays render last so nothing (e.g. the summit gesture layer) can sit on top of them. */}
+      {logOpen && <ExpeditionLog />}
+      {lbOpen && <Leaderboard />}
     </div>
   );
 }

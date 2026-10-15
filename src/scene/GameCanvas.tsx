@@ -4,10 +4,11 @@ import * as THREE from 'three';
 import { Atmosphere, Clouds, DistantLands, Spindrift } from './Environment';
 import { GameLoop } from './GameLoop';
 import { Gems } from './Gems';
+import { Wildlife } from './Wildlife';
 import { Landmarks } from './Landmarks';
 import { CameraRig, Player } from './Player';
-import { Terrain, Trail } from './Terrain';
-import { Rocks, Shrubs, TrailMarkers, Trees } from './Vegetation';
+import { FarTerrain, Terrain, Trail } from './Terrain';
+import { Ecology, Rocks, Shrubs, TrailMarkers, Trees } from './Vegetation';
 
 export function GameCanvas() {
   return (
@@ -27,13 +28,16 @@ export function GameCanvas() {
       <DistantLands />
       <Clouds />
       <Terrain />
+      <FarTerrain />
       <Trail />
       <Trees />
       <Rocks />
       <Shrubs />
+      <Ecology />
       <TrailMarkers />
       <Landmarks />
       <Gems />
+      <Wildlife />
       <Player />
       <Spindrift />
       <CameraRig />

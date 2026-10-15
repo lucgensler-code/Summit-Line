@@ -1,6 +1,7 @@
 import { useFrame } from '@react-three/fiber';
 import { useMemo, useRef } from 'react';
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { runtime, useGame } from '../game/store';
 import { getWorld, type Gem } from '../game/world';
 
@@ -24,10 +25,11 @@ function glowTexture() {
   return tex;
 }
 
-function GemItem({ gem, geo, mats, glow, beamGeo }: { gem: Gem; geo: THREE.BufferGeometry; mats: Record<string, THREE.Material>; glow: Record<string, THREE.SpriteMaterial>; beamGeo: THREE.BufferGeometry }) {
+function GemItem({ gem, cluster, base, mats, glow, beamGeo }: { gem: Gem; cluster: THREE.BufferGeometry; base: THREE.BufferGeometry; mats: Record<string, THREE.Material>; glow: Record<string, THREE.SpriteMaterial>; beamGeo: THREE.BufferGeometry }) {
   const group = useRef<THREE.Group>(null);
   const crystal = useRef<THREE.Mesh>(null);
   const phase = useMemo(() => (gem.x * 13.1 + gem.z * 7.7) % 6.28, [gem]);
+  const rot = useMemo(() => (gem.x * 3.7 + gem.z * 1.3) % 6.28, [gem]);
   useFrame(({ clock }) => {
     const gr = group.current;
     if (!gr) return;
@@ -36,16 +38,15 @@ function GemItem({ gem, geo, mats, glow, beamGeo }: { gem: Gem; geo: THREE.Buffe
     gr.visible = !collected && useGame.getState().phase !== 'prep';
     if (!gr.visible) return;
     const t = clock.elapsedTime + phase;
-    if (crystal.current) {
-      crystal.current.position.y = Math.sin(t * 1.8) * 0.18;
-      crystal.current.rotation.y = t * 1.2;
-    }
+    // A slow breathing glow instead of bobbing — minerals don't float.
+    if (crystal.current) crystal.current.scale.setScalar(1 + Math.sin(t * 1.6) * 0.03);
   });
   return (
-    <group ref={group} position={[gem.x, gem.y, gem.z]}>
-      <mesh ref={crystal} geometry={geo} material={mats[gem.kind]} castShadow />
-      <sprite material={glow[gem.kind]} scale={[3.4, 3.4, 1]} />
-      <mesh geometry={beamGeo} material={mats[`${gem.kind}Beam`]} position={[0, 14, 0]} />
+    <group ref={group} position={[gem.x, gem.y, gem.z]} rotation={[0, rot, 0]}>
+      <mesh geometry={base} material={mats.base} castShadow receiveShadow />
+      <mesh ref={crystal} geometry={cluster} material={mats[gem.kind]} castShadow />
+      <sprite material={glow[gem.kind]} position={[0, 0.45, 0]} scale={[1.7, 1.7, 1]} />
+      <mesh geometry={beamGeo} material={mats[`${gem.kind}Beam`]} position={[0, 9, 0]} />
     </group>
   );
 }
@@ -55,20 +56,44 @@ const POOL = 260;
 
 export function Gems() {
   const W = getWorld();
-  const { geo, mats, glow, beamGeo } = useMemo(() => {
-    const a = new THREE.OctahedronGeometry(0.5, 0);
-    a.scale(1, 1.55, 1);
+  const { cluster, base, mats, glow, beamGeo } = useMemo(() => {
+    // Irregular crystal cluster: a few hexagonal prisms with pointed tips, leaning out of a rock.
+    const prisms: THREE.BufferGeometry[] = [];
+    const spec = [
+      [0, 0, 0.62, 0.11, 0],
+      [0.13, 0.05, 0.42, 0.08, 0.5],
+      [-0.12, 0.06, 0.38, 0.075, -0.55],
+      [0.02, -0.13, 0.33, 0.07, 0.35],
+      [-0.06, 0.14, 0.26, 0.06, -0.2],
+    ];
+    spec.forEach(([x, z, h, r, lean], i) => {
+      const body = new THREE.CylinderGeometry(r, r * 1.1, h, 6).translate(0, h / 2, 0);
+      const tip = new THREE.ConeGeometry(r, r * 2.2, 6).translate(0, h + r * 1.1, 0);
+      const g = mergeGeometries([body.toNonIndexed(), tip.toNonIndexed()], false)!;
+      g.rotateZ(lean * 0.6).rotateX(lean * 0.4 * (i % 2 ? 1 : -1)).translate(x, 0.04, z);
+      prisms.push(g);
+    });
+    const cluster = mergeGeometries(prisms, false)!;
+    cluster.computeVertexNormals();
+    const base = new THREE.DodecahedronGeometry(0.28, 0).scale(1.3, 0.45, 1.1);
     const tex = glowTexture();
-    const beam = new THREE.CylinderGeometry(0.12, 0.35, 28, 6, 1, true);
+    const beam = new THREE.CylinderGeometry(0.05, 0.16, 18, 6, 1, true);
     const mk = (k: 'green' | 'red') =>
-      new THREE.MeshStandardMaterial({ color: STYLE[k].color, emissive: STYLE[k].emissive, emissiveIntensity: 1.1, roughness: 0.18, metalness: 0.15, flatShading: true });
+      new THREE.MeshStandardMaterial({ color: STYLE[k].color, emissive: STYLE[k].emissive, emissiveIntensity: 0.85, roughness: 0.22, metalness: 0.05, flatShading: true, transparent: true, opacity: 0.92 });
     const beamMat = (k: 'green' | 'red') =>
-      new THREE.MeshBasicMaterial({ color: STYLE[k].glow, transparent: true, opacity: 0.16, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: true });
+      new THREE.MeshBasicMaterial({ color: STYLE[k].glow, transparent: true, opacity: 0.07, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: true });
     const sprite = (k: 'green' | 'red') =>
-      new THREE.SpriteMaterial({ map: tex, color: STYLE[k].glow, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0.85 });
+      new THREE.SpriteMaterial({ map: tex, color: STYLE[k].glow, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0.55 });
     return {
-      geo: a,
-      mats: { green: mk('green'), red: mk('red'), greenBeam: beamMat('green'), redBeam: beamMat('red') } as Record<string, THREE.Material>,
+      cluster,
+      base,
+      mats: {
+        green: mk('green'),
+        red: mk('red'),
+        greenBeam: beamMat('green'),
+        redBeam: beamMat('red'),
+        base: new THREE.MeshStandardMaterial({ color: '#4a4240', flatShading: true, roughness: 1 }),
+      } as Record<string, THREE.Material>,
       glow: { green: sprite('green'), red: sprite('red') },
       beamGeo: beam,
     };
@@ -137,8 +162,8 @@ export function Gems() {
         }
         const ph = (t * 0.45 + k / SPARKS_PER_GEM) % 1;
         const a = k * 2.399 + t * 0.6;
-        const r = 0.5 + 0.5 * Math.sin(k * 1.7);
-        sp.setXYZ(idx, gem.x + Math.cos(a) * r, gem.y - 0.6 + ph * 2.4, gem.z + Math.sin(a) * r);
+        const r = 0.25 + 0.3 * Math.abs(Math.sin(k * 1.7));
+        sp.setXYZ(idx, gem.x + Math.cos(a) * r, gem.y + 0.15 + ph * 1.4, gem.z + Math.sin(a) * r);
       }
     });
     sp.needsUpdate = true;
@@ -147,7 +172,7 @@ export function Gems() {
     while (pool.seen < runtime.fx.length) {
       const b = runtime.fx[pool.seen++];
       const c = STYLE[b.kind].spark;
-      for (let k = 0; k < 46; k++) emitP(b.x, b.y, b.z, c, 3 + Math.random() * 4, 0.7 + Math.random() * 0.6);
+      for (let k = 0; k < 40; k++) emitP(b.x, b.y + 0.4, b.z, c, 2.2 + Math.random() * 3, 0.6 + Math.random() * 0.5);
     }
     if (runtime.fx.length === 0) pool.seen = 0;
     // speed-boost trail behind the climber
@@ -178,10 +203,10 @@ export function Gems() {
   return (
     <group>
       {W.gems.map((g) => (
-        <GemItem key={g.id} gem={g} geo={geo} mats={mats} glow={glow} beamGeo={beamGeo} />
+        <GemItem key={g.id} gem={g} cluster={cluster} base={base} mats={mats} glow={glow} beamGeo={beamGeo} />
       ))}
       <points geometry={sparkGeo} frustumCulled={false}>
-        <pointsMaterial size={0.16} vertexColors transparent opacity={0.9} blending={THREE.AdditiveBlending} depthWrite={false} />
+        <pointsMaterial size={0.09} vertexColors transparent opacity={0.8} blending={THREE.AdditiveBlending} depthWrite={false} />
       </points>
       <points geometry={pool.geo} frustumCulled={false}>
         <pointsMaterial size={0.22} vertexColors transparent blending={THREE.AdditiveBlending} depthWrite={false} />

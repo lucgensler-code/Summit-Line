@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { isMuted, setMuted } from '../game/audio';
 import { useGame } from '../game/store';
+import { getUnits, setUnits } from '../game/units';
+import { useUnits } from './useUnits';
 
 export function ControlsList() {
   return (
@@ -43,7 +45,9 @@ export function ControlsList() {
         <li>Steep uphill and deep snow drain stamina fast. Stop or rest to recover.</li>
         <li>The hatched end of the stamina bar is energy you have burned — only food restores it.</li>
         <li>Low hydration slows recovery and makes jogging costly. Drink before you are thirsty.</li>
-        <li>Green gems restore 35% stamina; red gems give 12 s of extra speed — great for shortcuts.</li>
+        <li>Green gems restore 35% stamina; red gems give 12 s of extra speed — use them for shortcuts.</li>
+        <li>Eat and drink on the move: water gives an instant stamina lift, food restores energy.</li>
+        <li>Score = summit + speed + supplies + route + gems + style (sign the register, never get exhausted).</li>
         <li>Refill water at Obsidian Tarn; there is none higher up.</li>
       </ul>
     </div>
@@ -53,9 +57,11 @@ export function ControlsList() {
 export function PauseMenu() {
   const { resume, restart, toTrailhead, showControls, setShowControls } = useGame();
   const [muted, setM] = useState(isMuted());
+  const units = useUnits();
+  const setLbOpen = useGame((s) => s.setLbOpen);
   return (
     <div className="modal-backdrop">
-      <div className="modal pause">
+      <div className="modal pause" role="dialog" aria-label="Paused">
         <h2>Paused</h2>
         {showControls ? (
           <>
@@ -87,6 +93,12 @@ export function PauseMenu() {
               }}
             >
               Sound: {muted ? 'Off' : 'On'}
+            </button>
+            <button type="button" className="btn subtle" onClick={() => setUnits(getUnits() === 'us' ? 'metric' : 'us')}>
+              Units: {units === 'us' ? 'US (ft, mi, lb, fl oz)' : 'Metric (m, km, kg, L)'}
+            </button>
+            <button type="button" className="btn subtle" onClick={() => setLbOpen(true)}>
+              High scores
             </button>
           </div>
         )}

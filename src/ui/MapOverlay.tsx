@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { runtime, useGame } from '../game/store';
 import { smoothstep } from '../game/noise';
 import { HALF, LAKE, elevationFt, getWorld, heightAt, snowCover, unitsToMiles } from '../game/world';
-import { fmtInt } from './format';
+import { fmtDistance, fmtElevation } from '../game/units';
 
 // Base map: hillshaded hypsometric terrain rendered once from the real heightfield.
 const BASE_RES = 360;
@@ -12,7 +12,7 @@ function lerpRGB(a: number[], b: number[], t: number) {
   return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
 }
 
-function getBase() {
+export function getBase() {
   if (baseCanvas) return baseCanvas;
   const c = document.createElement('canvas');
   c.width = c.height = BASE_RES;
@@ -179,7 +179,7 @@ export function MapOverlay() {
             ctx.lineWidth = 2;
             ctx.strokeStyle = '#0d1218';
             ctx.stroke();
-            label(`Summit ${fmtInt(elevationFt(W.summit.y))} ft`, -14);
+            label(`Summit ${fmtElevation(elevationFt(W.summit.y))}`, -14);
             return;
           }
           ctx.beginPath();
@@ -218,7 +218,7 @@ export function MapOverlay() {
       ctx.fillRect(16, size - 22, px, 4);
       ctx.font = '600 11px system-ui, sans-serif';
       ctx.textAlign = 'left';
-      ctx.fillText(`${mi} mi`, 22 + px, size - 16);
+      ctx.fillText(fmtDistance(mi, mi < 0.2 ? 2 : 1), 22 + px, size - 16);
       // north arrow
       ctx.save();
       ctx.translate(size - 24, 28);
@@ -252,7 +252,7 @@ export function MapOverlay() {
             <h2>Cindercrest · Climbers Trail</h2>
             {hud && (
               <p>
-                {fmtInt(hud.elevFt)} ft · {hud.remainMi.toFixed(2)} mi to summit · {Math.round(hud.progress * 100)}% of route
+                {fmtElevation(hud.elevFt)} · {fmtDistance(hud.remainMi, 2)} to summit · {Math.round(hud.progress * 100)}% of route
               </p>
             )}
           </div>
@@ -286,7 +286,7 @@ export function MapOverlay() {
           <li>
             <i className="lg-gem red" /> Speed gem
           </li>
-          <li>{unitsToMiles(W.main.length).toFixed(1)} mi route</li>
+          <li>{fmtDistance(unitsToMiles(W.main.length))} route</li>
         </ul>
       </div>
     </div>

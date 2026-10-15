@@ -51,13 +51,15 @@ export const TIME_SCALE = 30;
 /** Resting is a time-skip: the expedition clock runs this much faster while you sit. */
 export const REST_TIME_MULT = 4;
 
-export const WALK_SPEED = 4.5;
-export const JOG_SPEED = 7.9;
+export const WALK_SPEED = 5.2;
+export const JOG_SPEED = 9.1;
 export const JUMP_VELOCITY = 5.2;
 export const GRAVITY = 16;
-export const GEM_RADIUS = 2.0;
+export const GEM_RADIUS = 1.7;
 export const SPEED_BOOST = { mult: 1.4, seconds: 12 };
 export const GREEN_GEM_FRACTION = 0.35;
+/** Drinking restores this share of the energy cap as current stamina. */
+export const DRINK_STAMINA = 0.18;
 
 export function packWeight(l: Loadout, water = l.waterL, food = l.food) {
   let kg = BASE_PACK_KG + water + food * FOOD_KG;
@@ -124,6 +126,12 @@ export interface PlayerState {
   maxProgress: number;
   /** why stamina recovery is limited right now, if it is */
   limiter: string | null;
+  exhaustions: number;
+  /** hysteresis reference for elevation gain (ignores tiny ups and downs) */
+  gainRef: number;
+  /** seconds left on the eat/drink arm animation */
+  consumeT: number;
+  consumeKind: 'eat' | 'drink' | null;
 }
 
 export interface MoveIntent {
@@ -189,6 +197,10 @@ export function createPlayer(l: Loadout): PlayerState {
     foodUsed: 0,
     maxProgress: 0,
     limiter: null,
+    exhaustions: 0,
+    gainRef: th.y,
+    consumeT: 0,
+    consumeKind: null,
   };
 }
 
@@ -235,6 +247,7 @@ export function stepPlayer(p: PlayerState, l: Loadout, intent: MoveIntent, dt: n
   }
   dt = Math.min(dt, 0.1);
   p.realTime += dt;
+  if (p.consumeT > 0) p.consumeT = Math.max(0, p.consumeT - dt);
   p.gameTime += dt * TIME_SCALE * (p.resting ? REST_TIME_MULT : 1);
   const hour = clockHour(p, l);
   const light = daylight(hour);
@@ -339,7 +352,7 @@ export function stepPlayer(p: PlayerState, l: Loadout, intent: MoveIntent, dt: n
     nz *= BOUNDARY_R / rr;
     if (p.realTime - p.boundaryWarn > 4) {
       p.boundaryWarn = p.realTime;
-      emit({ type: 'toast', text: 'Wilderness boundary — the route lies uphill.', tone: 'warn' });
+      emit({ type: 'toast', text: 'Boundary · head back uphill', tone: 'warn' });
     }
   }
 
@@ -359,7 +372,11 @@ export function stepPlayer(p: PlayerState, l: Loadout, intent: MoveIntent, dt: n
       p.landT = 0.22;
     }
   }
-  if (ny > p.lastY) p.elevGain += ny - p.lastY;
+  // Elevation gain with hysteresis: small bumps along the trail don't inflate the total.
+  if (ny > p.gainRef) {
+    p.elevGain += ny - p.gainRef;
+    p.gainRef = ny;
+  } else if (ny < p.gainRef - 1.2) p.gainRef = ny + 1.2;
   p.lastY = ny;
   p.y = ny;
   p.maxY = Math.max(p.maxY, ny);
@@ -385,6 +402,7 @@ export function stepPlayer(p: PlayerState, l: Loadout, intent: MoveIntent, dt: n
     else if (deepSnow) effort += lerp(0.2, 0.7, soft) * (l.spikes ? 0.6 : 1);
     effort *= 1 + Math.max(0, kg - 8) * 0.035;
     if (elevFt > 9000) effort *= 1.15; // thin air
+    if (boosted) effort *= 0.75; // a red gem makes the effort feel lighter, not free
   }
   const cold = (elevFt > 9000 || hour < 7) && !l.insulated;
   if (cold) effort += 0.35;
@@ -401,12 +419,13 @@ export function stepPlayer(p: PlayerState, l: Loadout, intent: MoveIntent, dt: n
   p.stamina = clamp(p.stamina + (recover - effort) * dt, 0, p.maxStamina);
   if (p.stamina <= 0.01 && !p.exhausted) {
     p.exhausted = true;
+    p.exhaustions++;
     p.resting = false;
     emit({ type: 'exhausted' });
   }
   if (p.exhausted && p.stamina > Math.min(35, p.maxStamina * 0.5)) {
     p.exhausted = false;
-    emit({ type: 'toast', text: 'You have caught your breath.', tone: 'good' });
+    emit({ type: 'toast', text: 'Breath caught', tone: 'good' });
   }
 
   // Energy reserves: max stamina drains with calories burned.
@@ -440,7 +459,7 @@ export function stepPlayer(p: PlayerState, l: Loadout, intent: MoveIntent, dt: n
     if (p.gems[g.id]) continue;
     const dx = p.x - g.x;
     const dz = p.z - g.z;
-    if (dx * dx + dz * dz < GEM_RADIUS * GEM_RADIUS && Math.abs(p.y + p.jumpH + 1 - g.y) < 2.5) {
+    if (dx * dx + dz * dz < GEM_RADIUS * GEM_RADIUS && Math.abs(p.y + p.jumpH - g.y) < 2.2) {
       p.gems[g.id] = true;
       p.gemCounts[g.kind]++;
       if (g.kind === 'green') p.stamina = Math.min(p.maxStamina, p.stamina + p.maxStamina * GREEN_GEM_FRACTION);
@@ -471,38 +490,43 @@ export function nearSummit(p: PlayerState) {
 export type ActionResult = { ok: boolean; text: string };
 
 export function eat(p: PlayerState): ActionResult {
-  if (p.food <= 0) return { ok: false, text: 'No food left in your pack.' };
-  if (p.maxStamina > 97) return { ok: false, text: 'Energy is full — save the bar for later.' };
+  if (p.food <= 0) return { ok: false, text: 'No food left' };
+  if (p.maxStamina > 97) return { ok: false, text: 'Energy full · save it' };
   p.food -= 1;
   p.foodUsed += 1;
   const before = p.maxStamina;
   p.maxStamina = Math.min(100, p.maxStamina + 30);
-  p.stamina = Math.min(p.maxStamina, p.stamina + 15);
-  return { ok: true, text: `Trail bar: energy +${Math.round(p.maxStamina - before)}` };
+  p.stamina = Math.min(p.maxStamina, p.stamina + 12);
+  p.consumeT = 0.9;
+  p.consumeKind = 'eat';
+  return { ok: true, text: `Energy +${Math.round(p.maxStamina - before)}` };
 }
 
 export function drink(p: PlayerState): ActionResult {
-  if (p.water < 0.05) return { ok: false, text: p.nearWater ? 'Bottles empty — press Space to filter water.' : 'Water bottles are empty.' };
-  if (p.hydration > 97) return { ok: false, text: 'You are not thirsty.' };
+  if (p.water < 0.05) return { ok: false, text: p.nearWater ? 'Bottles empty · refill at the tarn' : 'Bottles empty' };
+  if (p.hydration > 97 && p.stamina > p.maxStamina - 2) return { ok: false, text: 'Not thirsty' };
   const amt = Math.min(WATER_PER_DRINK, p.water);
   p.water = Math.max(0, p.water - amt);
   p.waterUsed += amt;
-  p.hydration = Math.min(100, p.hydration + 34 * (amt / WATER_PER_DRINK));
-  p.stamina = Math.min(p.maxStamina, p.stamina + 6);
-  return { ok: true, text: `Drank ${amt.toFixed(1)} L  +hydration` };
+  const k = amt / WATER_PER_DRINK;
+  p.hydration = Math.min(100, p.hydration + 34 * k);
+  p.stamina = Math.min(p.maxStamina, p.stamina + p.maxStamina * DRINK_STAMINA * k);
+  p.consumeT = 0.9;
+  p.consumeKind = 'drink';
+  return { ok: true, text: 'Stamina +18% · hydrated' };
 }
 
 export function refill(p: PlayerState, l: Loadout): ActionResult {
   const cap = Math.max(l.waterL, 1);
-  if (p.water >= cap - 0.01) return { ok: false, text: 'Bottles already full.' };
+  if (p.water >= cap - 0.01) return { ok: false, text: 'Bottles already full' };
   p.water = cap;
-  return { ok: true, text: `Filtered water from Obsidian Tarn — ${cap.toFixed(1)} L` };
+  return { ok: true, text: 'Bottles filled at the tarn' };
 }
 
 export function toggleRest(p: PlayerState): ActionResult {
-  if (p.speed > 0.6) return { ok: false, text: 'Stop moving to rest.' };
+  if (p.speed > 0.6) return { ok: false, text: 'Stop to rest' };
   p.resting = !p.resting;
-  return { ok: true, text: p.resting ? 'Resting — the clock runs faster. Move to continue.' : 'Back on your feet.' };
+  return { ok: true, text: p.resting ? 'Resting · clock ×4' : 'Back on your feet' };
 }
 
 export function rating(p: PlayerState, l: Loadout) {

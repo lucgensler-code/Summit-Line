@@ -23,14 +23,17 @@ export function useDesktopControls(canvasHost: React.RefObject<HTMLElement | nul
     const onKeyDown = (e: KeyboardEvent) => {
       const g = useGame.getState();
       const target = e.target as HTMLElement | null;
-      if (g.phase !== 'playing' && target && (target.tagName === 'INPUT' || target.tagName === 'BUTTON') && e.code === 'Space') return;
-      if ((e.code === 'Escape' || e.code === 'KeyP') && !g.mapOpen) {
+      // Typing a name never moves the climber or toggles menus.
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) return;
+      if (g.phase !== 'playing' && target && target.tagName === 'BUTTON' && e.code === 'Space') return;
+      const overlay = g.mapOpen || g.logOpen || g.registerOpen || g.lbOpen;
+      if ((e.code === 'Escape' || e.code === 'KeyP') && !overlay) {
         if (g.phase === 'playing') g.pause();
         else if (g.phase === 'paused') g.resume();
         e.preventDefault();
         return;
       }
-      if (e.code === 'KeyM' && g.phase === 'playing') {
+      if (e.code === 'KeyM' && g.phase === 'playing' && !overlay) {
         if (!g.mapOpen) g.setMapOpen(true);
         return;
       }
@@ -39,7 +42,7 @@ export function useDesktopControls(canvasHost: React.RefObject<HTMLElement | nul
         g.toast(isMuted() ? 'Sound off' : 'Sound on');
         return;
       }
-      if (g.mapOpen) return;
+      if (overlay) return;
       if (g.phase !== 'playing') return;
       if (GAME_KEYS.has(e.code)) e.preventDefault();
       if (e.repeat) return;

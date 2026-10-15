@@ -2,6 +2,9 @@ import { useMemo, useState } from 'react';
 import { BEST_LABEL, clearRecords, loadRecords, personalBests, efficiency, type BestKind, type ExpeditionRecord } from '../game/records';
 import { ACTIVE_MOUNTAIN, ACTIVE_ROUTE } from '../game/routes';
 import { useGame } from '../game/store';
+import { fmtDistance, fmtElevation, fmtWater } from '../game/units';
+import { Modal } from './Modal';
+import { useUnits } from './useUnits';
 import { fmtClock, fmtDuration } from './format';
 
 export const fmtReal = (sec: number) => `${Math.floor(sec / 60)}:${Math.floor(sec % 60).toString().padStart(2, '0')}`;
@@ -13,13 +16,14 @@ function bestValue(kind: BestKind, r: ExpeditionRecord) {
     case 'fastestGame':
       return `${fmtDuration(r.gameSeconds / 3600)} on trail clock`;
     case 'fewestResources':
-      return `${r.waterUsedL.toFixed(1)} L water · ${r.foodUsed} bars`;
+      return `${fmtWater(r.waterUsedL)} water · ${r.foodUsed} bars`;
     case 'mostEfficient':
-      return `${Math.round(efficiency(r, ACTIVE_ROUTE.miles) * 100)}% · ${r.distanceMi.toFixed(2)} mi`;
+      return `${Math.round(efficiency(r, ACTIVE_ROUTE.miles) * 100)}% · ${fmtDistance(r.distanceMi, 2)}`;
   }
 }
 
 export function ExpeditionLog() {
+  useUnits();
   const setLogOpen = useGame((s) => s.setLogOpen);
   const [version, setVersion] = useState(0);
   const [confirm, setConfirm] = useState(false);
@@ -27,8 +31,7 @@ export function ExpeditionLog() {
   const pb = useMemo(() => personalBests(records, ACTIVE_MOUNTAIN.id, ACTIVE_ROUTE.id, ACTIVE_ROUTE.miles), [records]);
   const kinds: BestKind[] = ['fastestReal', 'fastestGame', 'fewestResources', 'mostEfficient'];
   return (
-    <div className="modal-backdrop" onPointerDown={(e) => e.target === e.currentTarget && setLogOpen(false)}>
-      <div className="modal log" role="dialog" aria-label="Expedition log">
+    <Modal onClose={() => setLogOpen(false)} label="Expedition log" className="log">
         <header className="log-head">
           <div>
             <div className="brand">EXPEDITION LOG</div>
@@ -36,9 +39,6 @@ export function ExpeditionLog() {
               {ACTIVE_MOUNTAIN.name} · {ACTIVE_ROUTE.name}
             </h2>
           </div>
-          <button type="button" className="icon-btn close" onClick={() => setLogOpen(false)} aria-label="Close log">
-            ✕
-          </button>
         </header>
         <div className="pb-grid">
           <div className="pb">
@@ -74,13 +74,21 @@ export function ExpeditionLog() {
                     <i>Trail clock</i> {fmtDuration(r.gameSeconds / 3600)}
                   </span>
                   <span>
-                    <i>Distance</i> {r.distanceMi.toFixed(2)} mi
+                    <i>Distance</i> {fmtDistance(r.distanceMi, 2)}
                   </span>
+                  <span>
+                    <i>Gained</i> {fmtElevation(r.gainFt)}
+                  </span>
+                  {r.score !== undefined && (
+                    <span>
+                      <i>Score</i> {r.score.toLocaleString('en-US')}
+                    </span>
+                  )}
                   <span>
                     <i>On trail</i> {Math.round(r.trailPct * 100)}%
                   </span>
                   <span>
-                    <i>Supplies</i> {r.waterUsedL.toFixed(1)} L · {r.foodUsed} bars
+                    <i>Used</i> {fmtWater(r.waterUsedL)} · {r.foodUsed} bars
                   </span>
                   <span>
                     <i>Gems</i> {r.gems.total} ({r.gems.green}◆ {r.gems.red}◆)
@@ -117,7 +125,6 @@ export function ExpeditionLog() {
             )}
           </div>
         )}
-      </div>
-    </div>
+    </Modal>
   );
 }

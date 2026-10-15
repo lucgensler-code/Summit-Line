@@ -156,13 +156,21 @@ function naturalHeight(x: number, z: number) {
     h -= basin * 4.5;
   }
 
-  // Fade to the surrounding plain at the edges of the map.
+  // Blend into the surrounding (non-playable) landscape so there is no visible map edge.
   const edge = Math.max(Math.abs(x), Math.abs(z));
-  h = lerp(h, -1.5, smoothstep(HALF - 90, HALF - 4, edge));
+  if (edge > HALF - 140) h = lerp(h, farHeight(x, z), smoothstep(HALF - 140, HALF - 2, edge));
   return h;
 }
 
 const LAKE_BENCH_LEVEL = profile(386) - 3;
+
+/** Foothill landscape beyond the playable map: rolling forested ridges rising toward distant peaks. */
+export function farHeight(x: number, z: number) {
+  const r = Math.hypot(x, z);
+  const ridges = fbm(x / 520 + 11, z / 520 - 7, 4, 501) * 55 + fbm(x / 170, z / 170, 3, 511) * 14;
+  const rise = smoothstep(1300, 5200, r) * 140;
+  return 14 + ridges * smoothstep(700, 1500, r) + rise + fbm(x / 140, z / 140, 3, 51) * 10;
+}
 LAKE.level = LAKE_BENCH_LEVEL - 1.6;
 
 // ---------------------------------------------------------------------------------------------
@@ -379,6 +387,11 @@ export interface World {
   shrubs: Scatter[];
   cairns: Scatter[];
   posts: Scatter[];
+  logs: Scatter[];
+  ferns: Scatter[];
+  drifts: Scatter[];
+  ice: Scatter[];
+  spires: Scatter[];
   colliders: Map<number, { x: number; z: number; r: number }[]>;
   gems: Gem[];
 }
@@ -621,6 +634,11 @@ function scatterAll(W: World) {
   W.shrubs = [];
   W.cairns = [];
   W.posts = [];
+  W.logs = [];
+  W.ferns = [];
+  W.drifts = [];
+  W.ice = [];
+  W.spires = [];
   const th = W.trailhead;
   const clearOf = (x: number, z: number, d: number) => {
     const hit = trailQuery(x, z, d + 1);
@@ -684,6 +702,37 @@ function scatterAll(W: World) {
     W.shrubs.push({ x, z, y: h - 0.05, s: 0.35 + rand() * 0.6, rot: rand() * Math.PI * 2, tint: rand() });
   }
 
+  // Ecological detail: fallen logs + ferns in the forest, wind-carved spires on the cone,
+  // snowdrifts on the upper slopes and ice formations around the crater.
+  const scatter = (count: number, tries: number, pick: () => { x: number; z: number }, ok: (x: number, z: number, h: number, slope: number) => boolean, push: (it: Scatter) => void, sMin: number, sMax: number) => {
+    let n = 0;
+    for (let t = 0; t < tries && n < count; t++) {
+      const { x, z } = pick();
+      const h = heightAt(x, z);
+      const { gx, gz } = gradientAt(x, z);
+      const slope = Math.hypot(gx, gz);
+      if (!ok(x, z, h, slope)) continue;
+      push({ x, z, y: h, s: sMin + rand() * (sMax - sMin), rot: rand() * Math.PI * 2, tint: rand() });
+      n++;
+    }
+  };
+  const square = () => ({ x: (rand() * 2 - 1) * (HALF - 30), z: (rand() * 2 - 1) * (HALF - 30) });
+  const polar = (r0: number, r1: number) => () => {
+    const r = r0 + rand() * (r1 - r0);
+    const a = rand() * Math.PI * 2;
+    return { x: Math.sin(a) * r, z: Math.cos(a) * r };
+  };
+  scatter(420, 9000, square, (x, z, h, sl) => h < TREELINE_H - 8 && sl < 0.5 && clearOf(x, z, 5) && !nearTrailhead(x, z), (it) => W.logs.push(it), 0.7, 1.4);
+  scatter(2600, 20000, square, (x, z, h, sl) => h < TREELINE_H + 4 && sl < 0.8 && clearOf(x, z, 2.2) && !nearLake(x, z, 2), (it) => W.ferns.push(it), 0.45, 0.95);
+  scatter(70, 4000, polar(70, 330), (x, z, h, sl) => h > 175 && sl > 0.45 && sl < 1.2 && clearOf(x, z, 6), (it) => {
+    W.spires.push(it);
+    addCollider(W, it.x, it.z, 0.9 * it.s);
+  }, 1.2, 2.6);
+  scatter(260, 6000, polar(36, 230), (x, z, h, sl) => snowCover(x, z, h, sl) > 0.55 && clearOf(x, z, 3.5), (it) => W.drifts.push(it), 1.2, 3.4);
+  scatter(46, 3000, polar(RIM_R - 26, RIM_R + 22), (x, z, h, sl) => clearOf(x, z, 2.5) && sl < 1.6 && h > 300, (it) => W.ice.push(it), 0.6, 1.5);
+  // Far forest beyond the playable boundary softens the transition to the foothills.
+  scatter(2200, 12000, polar(BOUNDARY_R + 10, HALF * 1.38), (x, z, h) => Math.max(Math.abs(x), Math.abs(z)) < HALF - 6 && h < TREELINE_H, (it) => W.trees.push({ ...it, s: 0.9 + it.s * 0.5, y: it.y - 0.3 }), 0.4, 1.2);
+
   // Trail furniture along the main line.
   const main = W.main;
   let lastMark = -999;
@@ -739,6 +788,6 @@ function placeGems(W: World): Gem[] {
     // right-hand perpendicular of the travel direction
     const x = main.pts[i].x - (dz / l) * g.side;
     const z = main.pts[i].z + (dx / l) * g.side;
-    return { id: g.id, kind: g.kind, x, z, y: heightAt(x, z) + 1.3 };
+    return { id: g.id, kind: g.kind, x, z, y: heightAt(x, z) + 0.02 };
   });
 }

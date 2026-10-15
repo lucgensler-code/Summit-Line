@@ -20,6 +20,9 @@ export interface ExpeditionRecord {
   finalStamina: number;
   finalMaxStamina: number;
   gems: { green: number; red: number; total: number };
+  /** v0.3+ */
+  score?: number;
+  registerSigned?: boolean;
 }
 
 export interface PersonalBests {

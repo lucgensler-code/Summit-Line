@@ -2,6 +2,8 @@ import { create } from 'zustand';
 import { startAudio } from './audio';
 import { clearInput } from './input';
 import { addRecord, type BestKind, type ExpeditionRecord } from './records';
+import { computeScore, type Score } from './scoring';
+import { localBoard, routeKey } from './leaderboard';
 import { ACTIVE_MOUNTAIN, ACTIVE_ROUTE, type GemKind } from './routes';
 import { DEFAULT_LOADOUT, clockHour, createPlayer, rating, type Loadout, type PlayerState } from './sim';
 import { getWorld, unitsToMiles } from './world';
@@ -17,6 +19,8 @@ export interface Toast {
   id: number;
   text: string;
   tone: 'info' | 'warn' | 'good';
+  /** 1 = routine, 2 = important, 3 = critical (interrupts) */
+  priority: number;
 }
 
 export interface HudSnapshot {
@@ -52,6 +56,10 @@ export interface HudSnapshot {
   gemCount: number;
   gemTotal: number;
   canAct: boolean;
+  tempF: number;
+  windMph: number;
+  weather: string;
+  consumeKind: 'eat' | 'drink' | null;
 }
 
 export interface Summary {
@@ -73,6 +81,11 @@ export interface Summary {
   waterUsed: number;
   bests: BestKind[];
   climbNumber: number;
+  score: Score;
+  bestScoreBefore: number;
+  qualifies: boolean;
+  registerSigned: boolean;
+  exhaustions: number;
 }
 
 export interface Burst {
@@ -121,7 +134,8 @@ interface GameStore {
   loadout: Loadout;
   runId: number;
   hud: HudSnapshot | null;
-  toasts: Toast[];
+  /** the one notification currently shown */
+  notice: Toast | null;
   summary: Summary | null;
   showControls: boolean;
   reading: { title: string; text: string } | null;
@@ -131,6 +145,8 @@ interface GameStore {
   /** summit: hide the summary to enjoy the view */
   viewMode: boolean;
   logOpen: boolean;
+  registerOpen: boolean;
+  lbOpen: boolean;
   setLoadout: (l: Partial<Loadout>) => void;
   start: () => void;
   pause: () => void;
@@ -138,7 +154,7 @@ interface GameStore {
   restart: () => void;
   toTrailhead: () => void;
   setHud: (h: HudSnapshot) => void;
-  toast: (text: string, tone?: Toast['tone']) => void;
+  toast: (text: string, tone?: Toast['tone'], priority?: number) => void;
   dismissToast: (id: number) => void;
   completeSummit: () => void;
   setShowControls: (v: boolean) => void;
@@ -148,7 +164,18 @@ interface GameStore {
   flashGem: (kind: GemKind) => void;
   setViewMode: (v: boolean) => void;
   setLogOpen: (v: boolean) => void;
+  setRegisterOpen: (v: boolean) => void;
+  setLbOpen: (v: boolean) => void;
 }
+
+/** True while a full-screen overlay is open — the simulation (and any boost timer) is paused. */
+export function overlayOpen(g: { mapOpen: boolean; logOpen: boolean; registerOpen: boolean; lbOpen: boolean }) {
+  return g.mapOpen || g.logOpen || g.registerOpen || g.lbOpen;
+}
+
+// Notification queue: one message at a time; critical ones interrupt.
+const queue: Toast[] = [];
+let noticeTimer: ReturnType<typeof setTimeout> | null = null;
 
 let toastId = 1;
 
@@ -171,7 +198,7 @@ export const useGame = create<GameStore>((set, get) => ({
   loadout: DEFAULT_LOADOUT,
   runId: 0,
   hud: null,
-  toasts: [],
+  notice: null,
   summary: null,
   showControls: false,
   reading: null,
@@ -180,6 +207,8 @@ export const useGame = create<GameStore>((set, get) => ({
   gemFlash: null,
   viewMode: false,
   logOpen: false,
+  registerOpen: false,
+  lbOpen: false,
   setLoadout: (l) => set({ loadout: { ...get().loadout, ...l } }),
   start: () => {
     startAudio();
@@ -189,15 +218,18 @@ export const useGame = create<GameStore>((set, get) => ({
       phase: 'playing',
       runId: runtime.runId,
       summary: null,
-      toasts: [],
+      notice: null,
       reading: null,
       showControls: false,
       mapOpen: false,
       viewMode: false,
       logOpen: false,
+      registerOpen: false,
+      lbOpen: false,
       showHint: !runtime.cameraUsed,
     });
-    get().toast('Expedition started — follow the trail north toward Cindercrest.', 'info');
+    queue.length = 0;
+    get().toast('Follow the trail north', 'info', 2);
   },
   pause: () => {
     if (get().phase === 'playing') {
@@ -212,15 +244,39 @@ export const useGame = create<GameStore>((set, get) => ({
   toTrailhead: () => {
     clearInput();
     runtime.player = null;
-    set({ phase: 'prep', summary: null, hud: null, toasts: [], reading: null, mapOpen: false, viewMode: false });
+    queue.length = 0;
+    set({ phase: 'prep', summary: null, hud: null, notice: null, reading: null, mapOpen: false, viewMode: false, registerOpen: false, lbOpen: false });
   },
   setHud: (h) => set({ hud: h }),
-  toast: (text, tone = 'info') => {
-    const id = toastId++;
-    set({ toasts: [...get().toasts.slice(-2), { id, text, tone }] });
-    setTimeout(() => get().dismissToast(id), 3600);
+  toast: (text, tone = 'info', priority = tone === 'warn' ? 2 : 1) => {
+    const cur = get().notice;
+    if (cur?.text === text || queue.some((q) => q.text === text)) return;
+    const t: Toast = { id: toastId++, text, tone, priority };
+    const show = (n: Toast) => {
+      set({ notice: n });
+      if (noticeTimer) clearTimeout(noticeTimer);
+      noticeTimer = setTimeout(() => get().dismissToast(n.id), n.priority >= 3 ? 3200 : 2400);
+    };
+    if (!cur) show(t);
+    else if (priority >= 3 && cur.priority < 3) {
+      queue.unshift(cur);
+      show(t);
+    } else {
+      queue.push(t);
+      queue.sort((a, b) => b.priority - a.priority);
+      // Routine chatter goes stale quickly; keep the queue short.
+      while (queue.length > 3) queue.pop();
+    }
   },
-  dismissToast: (id) => set({ toasts: get().toasts.filter((t) => t.id !== id) }),
+  dismissToast: (id) => {
+    if (get().notice?.id !== id) return;
+    const next = queue.shift() ?? null;
+    set({ notice: next });
+    if (next) {
+      if (noticeTimer) clearTimeout(noticeTimer);
+      noticeTimer = setTimeout(() => get().dismissToast(next.id), next.priority >= 3 ? 3200 : 2400);
+    }
+  },
   completeSummit: () => {
     const p = runtime.player;
     if (!p) return;
@@ -251,7 +307,24 @@ export const useGame = create<GameStore>((set, get) => ({
       finalStamina: p.stamina,
       finalMaxStamina: p.maxStamina,
       gems: { green: gems.green, red: gems.red, total: gems.total },
+      registerSigned: runtime.registerSigned,
     };
+    const score = computeScore({
+      realSeconds: p.realTime,
+      routeMiles: ACTIVE_ROUTE.miles,
+      distanceMi: rec.distanceMi,
+      waterUsedL: p.waterUsed,
+      foodUsed: p.foodUsed,
+      finalMaxStamina: p.maxStamina,
+      exhaustions: p.exhaustions,
+      gems: gems.total,
+      gemsAvailable: W.gems.length,
+      registerSigned: runtime.registerSigned,
+    });
+    rec.score = score.total;
+    const rk = routeKey(ACTIVE_MOUNTAIN.id, ACTIVE_ROUTE.id);
+    const prevBest = localBoard.top(rk, 'score', 1)[0]?.score ?? 0;
+    const qualifies = localBoard.qualifies(rk, score.total);
     const bests = addRecord(rec, ACTIVE_ROUTE.miles);
     let climbNumber = 1;
     try {
@@ -283,6 +356,11 @@ export const useGame = create<GameStore>((set, get) => ({
         waterUsed: p.waterUsed,
         bests: climbNumber > 1 ? bests : [],
         climbNumber,
+        score,
+        bestScoreBefore: prevBest,
+        qualifies,
+        registerSigned: runtime.registerSigned,
+        exhaustions: p.exhaustions,
       },
     });
   },
@@ -303,4 +381,9 @@ export const useGame = create<GameStore>((set, get) => ({
   flashGem: (kind) => set({ gemFlash: { kind, at: performance.now() } }),
   setViewMode: (v) => set({ viewMode: v }),
   setLogOpen: (v) => set({ logOpen: v }),
+  setRegisterOpen: (v) => {
+    clearInput();
+    set({ registerOpen: v });
+  },
+  setLbOpen: (v) => set({ lbOpen: v }),
 }));

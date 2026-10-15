@@ -8,6 +8,7 @@ import {
   TERRAIN_SEGMENTS,
   TRAIL_HALF_WIDTH,
   TREELINE_H,
+  farHeight,
   getWorld,
   heightAt,
   snowCover,
@@ -126,6 +127,85 @@ export function Terrain() {
 }
 
 // ---------------------------------------------------------------------------------------------
+
+/**
+ * Non-playable surroundings: concentric square rings from the terrain's own edge vertices out to
+ * ~9 km, following farHeight(). Ring 0 reuses the playable mesh's boundary heights exactly, so
+ * there is no seam or visible map edge — the landscape just continues into the fog.
+ */
+export function FarTerrain() {
+  const geometry = useMemo(() => {
+    const W = getWorld();
+    const N = TERRAIN_SEGMENTS;
+    const N1 = N + 1;
+    // Perimeter of the playable grid, clockwise.
+    const ring: { ix: number; iz: number }[] = [];
+    for (let i = 0; i < N; i++) ring.push({ ix: i, iz: 0 });
+    for (let i = 0; i < N; i++) ring.push({ ix: N, iz: i });
+    for (let i = N; i > 0; i--) ring.push({ ix: i, iz: N });
+    for (let i = N; i > 0; i--) ring.push({ ix: 0, iz: i });
+    const M = ring.length;
+    const RINGS = 24;
+    const OUTER = 9000;
+    const pos = new Float32Array((RINGS + 1) * M * 3);
+    const col = new Float32Array((RINGS + 1) * M * 3);
+    const c = new THREE.Color();
+    for (let k = 0; k <= RINGS; k++) {
+      const f = 1 + Math.pow(k / RINGS, 1.9) * (OUTER / HALF - 1);
+      for (let j = 0; j < M; j++) {
+        const { ix, iz } = ring[j];
+        const bx = -HALF + ix * GRID_STEP;
+        const bz = -HALF + iz * GRID_STEP;
+        const x = bx * f;
+        const z = bz * f;
+        const h = k === 0 ? W.heights[iz * N1 + ix] : farHeight(x, z);
+        const o = (k * M + j) * 3;
+        pos[o] = x;
+        pos[o + 1] = h;
+        pos[o + 2] = z;
+        terrainColor(x, z, h, 0.25, c);
+        const n = fbm(x / 260, z / 260, 2, 707) * 0.5 + 0.5;
+        if (k > 0) c.lerp(FAR_FOREST, 0.55 + n * 0.25).lerp(FAR_SNOW, smoothstep(150, 210, h) * 0.8);
+        col[o] = c.r;
+        col[o + 1] = c.g;
+        col[o + 2] = c.b;
+      }
+    }
+    const idx = new Uint32Array(RINGS * M * 6);
+    let t = 0;
+    for (let k = 0; k < RINGS; k++)
+      for (let j = 0; j < M; j++) {
+        const a = k * M + j;
+        const b = k * M + ((j + 1) % M);
+        const cc = (k + 1) * M + j;
+        const d = (k + 1) * M + ((j + 1) % M);
+        idx[t++] = a;
+        idx[t++] = b;
+        idx[t++] = cc;
+        idx[t++] = b;
+        idx[t++] = d;
+        idx[t++] = cc;
+      }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    g.setIndex(new THREE.BufferAttribute(idx, 1));
+    g.computeVertexNormals();
+    // Fix winding-independent lighting: make sure normals face up.
+    const nrm = g.attributes.normal as THREE.BufferAttribute;
+    for (let i = 0; i < nrm.count; i++) if (nrm.getY(i) < 0) nrm.setXYZ(i, -nrm.getX(i), -nrm.getY(i), -nrm.getZ(i));
+    g.computeBoundingSphere();
+    return g;
+  }, []);
+  return (
+    <mesh geometry={geometry}>
+      <meshStandardMaterial vertexColors roughness={1} side={THREE.DoubleSide} />
+    </mesh>
+  );
+}
+
+const FAR_FOREST = new THREE.Color('#2d4a26');
+const FAR_SNOW = new THREE.Color('#dfe8f0');
 
 const TRAIL_COLORS = {
   dirt: C('#a7804f'),

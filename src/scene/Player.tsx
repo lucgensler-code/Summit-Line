@@ -55,7 +55,7 @@ export function Player() {
   const poleR = useRef<THREE.Group>(null);
   const lamp = useRef<THREE.SpotLight>(null);
   const lampTarget = useMemo(() => new THREE.Object3D(), []);
-  const gait = useRef({ phase: 0, blendJog: 0, rest: 0, tired: 0, summit: 0, lean: 0, air: 0 });
+  const gait = useRef({ phase: 0, blendJog: 0, rest: 0, tired: 0, summit: 0, lean: 0, air: 0, eat: 0, rootY: 0 });
   const loadout = useGame((s) => s.loadout);
   const phase = useGame((s) => s.phase);
 
@@ -66,7 +66,6 @@ export function Player() {
     if (!r) return;
     r.visible = !!p && phase !== 'prep';
     if (!p) return;
-    r.position.set(p.x, p.y + p.jumpH, p.z);
     r.rotation.y = p.heading;
 
     const g = gait.current;
@@ -77,6 +76,7 @@ export function Player() {
     const k = (rate: number) => 1 - Math.exp(-dt * rate);
     g.blendJog = lerp(g.blendJog, jogging ? 1 : 0, k(6));
     g.rest = lerp(g.rest, p.activity === 'rest' ? 1 : 0, k(4));
+    g.eat = lerp(g.eat, p.consumeT > 0.1 ? 1 : 0, k(10));
     g.tired = lerp(g.tired, p.activity === 'exhausted' ? 1 : 0, k(4));
     g.summit = lerp(g.summit, p.summited ? 1 : 0, k(3));
     g.air = lerp(g.air, p.jumpH > 0.05 ? 1 : 0, k(14));
@@ -92,24 +92,59 @@ export function Player() {
     const s = Math.sin(g.phase);
     const c = Math.cos(g.phase);
 
-    // Legs
-    const restThigh = -1.45 * g.rest;
+    // Legs — gait targets first, then a light-weight grounding pass (no full IK):
+    // each foot samples the terrain under it and the knee folds to absorb the height difference.
     const set = (j: Joint, x: number) => {
       if (j) j.rotation.x = lerp(j.rotation.x, x, k(18));
     };
     const tuck = g.air * -0.7;
-    set(thighL.current, s * amp * (1 - g.air) + tuck + restThigh - g.tired * 0.35 - Math.max(g.lean, 0) * 0.3);
-    set(thighR.current, -s * amp * (1 - g.air) + tuck * 0.6 + restThigh - g.tired * 0.35 - Math.max(g.lean, 0) * 0.3);
-    set(shinL.current, Math.max(0, -c) * amp * 1.3 * (1 - g.air) + g.air * 1.1 + 0.05 + g.rest * 1.45 + g.tired * 0.5);
-    set(shinR.current, Math.max(0, c) * amp * 1.3 * (1 - g.air) + g.air * 0.8 + 0.05 + g.rest * 1.45 + g.tired * 0.5);
+    const lean = Math.max(g.lean, 0) * 0.3;
+    // Kneel: left foot planted forward (thigh level, shin vertical), right knee on the ground.
+    let tL = s * amp * (1 - g.air) + tuck - g.tired * 0.35 - lean;
+    let tR = -s * amp * (1 - g.air) + tuck * 0.6 - g.tired * 0.35 - lean;
+    let kL = Math.max(0, -c) * amp * 1.3 * (1 - g.air) + g.air * 1.1 + 0.05 + g.tired * 0.5;
+    let kR = Math.max(0, c) * amp * 1.3 * (1 - g.air) + g.air * 0.8 + 0.05 + g.tired * 0.5;
+    tL = lerp(tL, -1.5, g.rest);
+    kL = lerp(kL, 1.5, g.rest);
+    tR = lerp(tR, 0.1, g.rest);
+    kR = lerp(kR, 1.45, g.rest);
+    const LEG = 0.9;
+    const fwdX = Math.sin(p.heading);
+    const fwdZ = Math.cos(p.heading);
+    const footGround = (thigh: number, side: number) => {
+      const reach = -Math.sin(thigh) * LEG * 0.85; // + forward
+      const fx = p.x + fwdX * reach + fwdZ * side * 0.12;
+      const fz = p.z + fwdZ * reach - fwdX * side * 0.12;
+      return heightAt(fx, fz);
+    };
+    let rootY = p.y;
+    if (p.jumpH <= 0 && g.rest < 0.5) {
+      const hL = footGround(tL, 1);
+      const hR = footGround(tR, -1);
+      rootY = Math.min(p.y, hL, hR);
+      // Fold the knee of whichever foot stands on higher ground.
+      const fold = (h: number) => Math.acos(clamp(1 - Math.max(0, h - rootY) / LEG, 0.2, 1));
+      const aL = fold(hL);
+      const aR = fold(hR);
+      tL -= aL;
+      kL += aL * 2;
+      tR -= aR;
+      kR += aR * 2;
+    }
+    g.rootY = lerp(g.rootY || rootY, rootY, k(20));
+    r.position.set(p.x, g.rootY + p.jumpH + 0.03, p.z);
+    set(thighL.current, tL);
+    set(thighR.current, tR);
+    set(shinL.current, kL);
+    set(shinR.current, kR);
 
     // Arms (poles plant opposite to legs); summit = arms raised
     const armSwing = amp * (loadout.poles ? 0.75 : 0.9);
     const raise = g.summit * (-2.7 + Math.sin(t * 3) * 0.1);
     set(armL.current, -s * armSwing + raise - g.tired * 0.9 + g.rest * -0.5);
-    set(armR.current, s * armSwing + raise - g.tired * 0.9 + g.rest * -0.5);
+    set(armR.current, lerp(s * armSwing + raise - g.tired * 0.9 + g.rest * -0.5, -2.05, g.eat));
     set(foreL.current, -0.25 - g.blendJog * 0.9 - g.tired * 0.2 + g.summit * 0.2);
-    set(foreR.current, -0.25 - g.blendJog * 0.9 - g.tired * 0.2 + g.summit * 0.2);
+    set(foreR.current, lerp(-0.25 - g.blendJog * 0.9 - g.tired * 0.2 + g.summit * 0.2, -1.7, g.eat));
     if (armL.current) armL.current.rotation.z = lerp(armL.current.rotation.z, 0.1 + g.summit * 0.35, k(8));
     if (armR.current) armR.current.rotation.z = lerp(armR.current.rotation.z, -0.1 - g.summit * 0.35, k(8));
 
@@ -117,7 +152,7 @@ export function Player() {
     const bob = moving ? Math.abs(Math.sin(g.phase)) * lerp(0.04, 0.09, g.blendJog) : 0;
     const breathe = Math.sin(t * (p.stamina < 30 ? 5 : 1.8)) * (p.stamina < 30 ? 0.02 : 0.008);
     if (body.current) {
-      body.current.position.y = lerp(body.current.position.y, bob - g.rest * 0.52 - g.tired * 0.12, k(14));
+      body.current.position.y = lerp(body.current.position.y, bob - g.rest * 0.55 - g.tired * 0.12, k(14));
     }
     if (torso.current) {
       const lean = 0.06 + g.blendJog * 0.22 + Math.max(g.lean, 0) * 0.35 + g.tired * 0.75 - g.summit * 0.15 + g.rest * 0.1;
@@ -150,7 +185,7 @@ export function Player() {
       <primitive object={lampTarget} />
       <group ref={body}>
         {/* hips */}
-        <group position={[0, 0.98, 0]}>
+        <group position={[0, 1.04, 0]}>
           <mesh castShadow>
             <boxGeometry args={[0.36, 0.2, 0.22]} />
             <meshStandardMaterial color={COLORS.pants} />
@@ -268,20 +303,34 @@ const tmpPos = new THREE.Vector3();
 
 /** Third-person follow camera, prep-screen flyover and summit cinematic. */
 export function CameraRig() {
-  const { camera } = useThree();
+  const { camera, size } = useThree();
   const look = useRef(new THREE.Vector3());
   const initialised = useRef(-1);
   const dist = useRef(CAM_DEFAULT);
+  const offset = useRef(false);
   useFrame(({ clock }, rawDt) => {
     const dt = Math.min(rawDt, 0.1);
     const g = useGame.getState();
     const p = runtime.player;
     const t = clock.elapsedTime;
 
+    // Portrait home screen: shift the projection so the mountain sits in the top quarter,
+    // above the planner card. Cleared as soon as the climb starts.
+    const pc = camera as THREE.PerspectiveCamera;
+    const wantOffset = (g.phase === 'prep' || !p) && size.height > size.width * 1.15;
+    if (wantOffset) {
+      pc.setViewOffset(size.width, size.height, 0, size.height * 0.27, size.width, size.height);
+      offset.current = true;
+    } else if (offset.current) {
+      pc.clearViewOffset();
+      offset.current = false;
+    }
+
     if (g.phase === 'prep' || !p) {
-      // Slow flyover of the mountain behind the expedition planner.
+      // Slow orbit of the mountain behind the expedition planner.
       const a = t * 0.025 + 0.6;
-      tmpPos.set(Math.sin(a) * 900, 330 + Math.sin(t * 0.05) * 30, Math.cos(a) * 900);
+      const far = wantOffset ? 1300 : 900;
+      tmpPos.set(Math.sin(a) * far, 330 + Math.sin(t * 0.05) * 30, Math.cos(a) * far);
       tmpTarget.set(0, 170, 0);
       camera.position.lerp(tmpPos, initialised.current === -2 ? 0.02 : 1);
       look.current.lerp(tmpTarget, initialised.current === -2 ? 0.05 : 1);

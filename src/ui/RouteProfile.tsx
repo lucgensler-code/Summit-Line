@@ -1,17 +1,30 @@
 import { useMemo } from 'react';
+import { fmtDistance } from '../game/units';
 import { elevationFt, getWorld, unitsToMiles } from '../game/world';
+import { useUnits } from './useUnits';
 
-/** Elevation profile of the route, like an outdoor-navigation app. */
+const SHORT: Record<string, string> = {
+  treeline: 'Treeline',
+  camp: 'Tarn Camp',
+  snow: 'Snowfield',
+  rim: 'Crater Rim',
+  summit: 'Summit',
+};
+
+/** Elevation profile of the route, like an outdoor-navigation app, with non-overlapping labels. */
 export function RouteProfile({ progress, width = 260, height = 70, labels = false, reached = [] }: { progress?: number; width?: number; height?: number; labels?: boolean; reached?: string[] }) {
+  useUnits();
   const W = getWorld();
   const { path, area, cps } = useMemo(() => {
     const main = W.main;
     const feet = main.heights.map((h) => elevationFt(h));
     const minF = Math.min(...feet);
     const maxF = Math.max(...feet);
-    const pad = 6;
-    const X = (s: number) => pad + (s / main.length) * (width - pad * 2);
-    const Y = (f: number) => height - pad - ((f - minF) / (maxF - minF)) * (height - pad * 2 - (labels ? 12 : 4));
+    const padX = 8;
+    const top = labels ? 22 : 4;
+    const bottom = labels ? 20 : 4;
+    const X = (s: number) => padX + (s / main.length) * (width - padX * 2);
+    const Y = (f: number) => height - bottom - ((f - minF) / (maxF - minF)) * (height - top - bottom);
     let d = '';
     for (let i = 0; i < main.pts.length; i += 4) d += `${i ? 'L' : 'M'}${X(main.s[i]).toFixed(1)},${Y(feet[i]).toFixed(1)}`;
     d += `L${X(main.length).toFixed(1)},${Y(feet[feet.length - 1]).toFixed(1)}`;
@@ -21,15 +34,43 @@ export function RouteProfile({ progress, width = 260, height = 70, labels = fals
       while (i < main.s.length - 1 && main.s[i] < s) i++;
       return i;
     };
-    const cps = W.checkpoints.map((c) => ({ id: c.id, name: c.name, x: X(c.s), y: Y(feet[idxAt(c.s)]) }));
+    // Collision-aware labels: try above the marker, then below, then a second row above.
+    const placed: { x0: number; x1: number; row: number }[] = [];
+    const cps = W.checkpoints.map((c) => {
+      const x = X(c.s);
+      const y = Y(feet[idxAt(c.s)]);
+      const text = SHORT[c.id] ?? c.name;
+      const w = text.length * 5.4 + 6;
+      let anchor: 'start' | 'middle' | 'end' = 'middle';
+      let x0 = x - w / 2;
+      if (x0 < 2) {
+        anchor = 'start';
+        x0 = x - 3;
+      } else if (x + w / 2 > width - 2) {
+        anchor = 'end';
+        x0 = x - w + 3;
+      }
+      const x1 = x0 + w;
+      const rows = [0, 1, 2];
+      let row = 0;
+      for (const r of rows) {
+        if (!placed.some((p) => p.row === r && !(x1 < p.x0 || x0 > p.x1))) {
+          row = r;
+          break;
+        }
+      }
+      placed.push({ x0, x1, row });
+      const ly = row === 0 ? y - 8 : row === 1 ? y + 15 : y - 19;
+      return { id: c.id, x, y, text, anchor, ly };
+    });
     return { path: d, area, cps };
   }, [W, width, height, labels]);
-  const px = progress !== undefined ? 6 + Math.min(Math.max(progress, 0), 1) * (width - 12) : null;
+  const px = progress !== undefined ? 8 + Math.min(Math.max(progress, 0), 1) * (width - 16) : null;
   return (
-    <svg className="route-profile" width={width} height={height} viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`Route elevation profile, ${unitsToMiles(W.main.length).toFixed(1)} miles`}>
+    <svg className="route-profile" width={width} height={height} viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`Route elevation profile, ${fmtDistance(unitsToMiles(W.main.length))}`}>
       <defs>
         <linearGradient id="rp-fill" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#f1f5f7" stopOpacity="0.45" />
+          <stop offset="0%" stopColor="#f1f5f7" stopOpacity="0.35" />
           <stop offset="100%" stopColor="#f1f5f7" stopOpacity="0.02" />
         </linearGradient>
       </defs>
@@ -38,9 +79,9 @@ export function RouteProfile({ progress, width = 260, height = 70, labels = fals
       {cps.map((c) => (
         <g key={c.id}>
           <circle cx={c.x} cy={c.y} r={3} fill={reached.includes(c.id) ? '#f0a35e' : '#1b2430'} stroke="#f0a35e" strokeWidth="1.4" />
-          {labels && c.id !== 'rim' && (
-            <text x={c.x} y={c.y - 7} textAnchor={c.id === 'summit' ? 'end' : 'middle'} fontSize="9" fill="#dfe6ea">
-              {c.name.replace('Obsidian Tarn Camp', 'Tarn Camp').replace('Cindercrest ', '')}
+          {labels && (
+            <text x={c.x} y={c.ly} textAnchor={c.anchor} fontSize="9.5" fontWeight="600" fill="#ffffff" stroke="rgba(12,16,22,0.85)" strokeWidth="3" paintOrder="stroke">
+              {c.text}
             </text>
           )}
         </g>

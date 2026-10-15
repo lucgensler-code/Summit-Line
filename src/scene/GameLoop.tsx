@@ -20,7 +20,8 @@ import {
   SPEED_BOOST,
 } from '../game/sim';
 import { CAM_MAX, CAM_MIN } from '../game/store';
-import { runtime, useGame, type HudSnapshot } from '../game/store';
+import { conditionsAt } from '../game/weather';
+import { overlayOpen, runtime, useGame, type HudSnapshot } from '../game/store';
 import { SURFACE_LABEL, elevationFt, getWorld, unitsToMiles } from '../game/world';
 
 interface Interaction {
@@ -53,14 +54,8 @@ function findInteraction(p: PlayerState): Interaction | null {
     if (Math.hypot(p.x - lm.x, p.z - lm.z) < 3.6) {
       if (lm.kind === 'register') {
         return {
-          label: runtime.registerSigned ? 'Read the climbers register' : 'Sign the climbers register',
-          run: () => {
-            if (!runtime.registerSigned) {
-              runtime.registerSigned = true;
-              g.toast('Register signed. Rangers know your plan.', 'good');
-            }
-            g.setReading({ title: lm.title, text: lm.text });
-          },
+          label: runtime.registerSigned ? 'Open the climbers register' : 'Sign the climbers register',
+          run: () => g.setRegisterOpen(true),
         };
       }
       return {
@@ -106,7 +101,7 @@ export function GameLoop() {
       const W = getWorld();
       updateWind((p.y - W.hTrailhead) / (W.hSummit - W.hTrailhead), performance.now() / 1000, g.phase === 'playing' || g.phase === 'summit');
     }
-    if (!p || g.phase !== 'playing' || g.mapOpen) {
+    if (!p || g.phase !== 'playing' || overlayOpen(g)) {
       input.queue.length = 0;
       return;
     }
@@ -126,10 +121,10 @@ export function GameLoop() {
         else jump(p);
       } else if (a === 'eat') {
         const r = eat(p);
-        g.toast(r.text, r.ok ? 'good' : 'warn');
+        g.toast(r.text, r.ok ? 'good' : 'warn', 2);
       } else if (a === 'drink') {
         const r = drink(p);
-        g.toast(r.text, r.ok ? 'good' : 'warn');
+        g.toast(r.text, r.ok ? 'good' : 'warn', 2);
       } else if (a === 'rest') {
         const r = toggleRest(p);
         g.toast(r.text, r.ok ? 'info' : 'warn');
@@ -147,18 +142,18 @@ export function GameLoop() {
     const emit = (e: GameEvent) => {
       if (e.type === 'checkpoint') {
         const msg: Record<string, string> = {
-          treeline: 'Treeline reached — the forest gives way to open alpine slopes.',
-          camp: 'Alpine checkpoint: Obsidian Tarn Camp. Refill water at the tarn before the climb.',
-          snow: 'Upper snowfield — stay on the boot track to avoid postholing.',
-          rim: 'Crater rim! Follow the rim north to the true summit.',
+          treeline: 'Treeline reached',
+          camp: 'Tarn Camp · last water',
+          snow: 'Snowfield · stay on the boot track',
+          rim: 'Crater rim · summit is north',
         };
-        g.toast(msg[e.id] ?? `Checkpoint: ${e.name}`, 'good');
+        g.toast(msg[e.id] ?? e.name, 'good', 2);
       } else if (e.type === 'exhausted') {
-        g.toast('Exhausted! Slow down, rest (R) or eat (E) to recover.', 'warn');
+        g.toast('Exhausted · drink, eat or rest', 'warn', 3);
       } else if (e.type === 'gem') {
         runtime.fx.push({ kind: e.kind, x: e.x, y: e.y, z: e.z, t0: performance.now() / 1000 });
         g.flashGem(e.kind);
-        g.toast(e.kind === 'green' ? '+35% Stamina' : `Speed Boost! ${SPEED_BOOST.seconds}s`, 'good');
+        g.toast(e.kind === 'green' ? 'Stamina restored' : `Speed boost · ${SPEED_BOOST.seconds}s`, 'good', 3);
       } else g.toast(e.text, e.tone);
     };
     stepPlayer(p, l, { x: ix, z: iz, jog }, dt, emit);
@@ -167,23 +162,23 @@ export function GameLoop() {
     const hour = clockHour(p, l);
     if (!f.thirsty && p.hydration < 35) {
       f.thirsty = true;
-      g.toast('Your mouth is dry — drink water (Q).', 'warn');
+      g.toast('Thirsty · drink water', 'warn');
     } else if (p.hydration > 50) f.thirsty = false;
     if (!f.hungry && p.maxStamina < 55) {
       f.hungry = true;
-      g.toast('Your energy reserves are fading — eat something (E).', 'warn');
+      g.toast('Energy low · eat a bar', 'warn');
     } else if (p.maxStamina > 70) f.hungry = false;
     if (!f.sunrise && daylight(hour) > 0.5) {
       f.sunrise = true;
-      g.toast('Sunrise — alpenglow lights up the summit cone.', 'info');
+      g.toast('Sunrise', 'info');
     }
     if (!f.soft && snowSoftness(hour) > 0.4) {
       f.soft = true;
-      g.toast('The sun is softening the snow. Expect deeper postholing.', 'warn');
+      g.toast('Snow softening', 'warn');
     }
     if (!f.snow && p.postholing) {
       f.snow = true;
-      g.toast('Postholing in deep snow — the boot track is much easier.', 'warn');
+      g.toast('Postholing · find the boot track', 'warn');
     }
 
     hudTimer.current -= dt;
@@ -223,6 +218,11 @@ export function GameLoop() {
         gemCount: p.gemCounts.green + p.gemCounts.red,
         gemTotal: W.gems.length,
         canAct: !!interaction,
+        ...(() => {
+          const c = conditionsAt(elevationFt(p.y), hour);
+          return { tempF: c.tempF, windMph: c.windMph, weather: c.label };
+        })(),
+        consumeKind: p.consumeT > 0 ? p.consumeKind : null,
       };
       g.setHud(hud);
       // Close sign text when walking away.
