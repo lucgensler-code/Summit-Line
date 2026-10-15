@@ -2,7 +2,7 @@ import { Canvas } from '@react-three/fiber';
 import * as THREE from 'three';
 import { Atmosphere, Clouds, DistantLands, Spindrift } from './Environment';
 import { GameLoop } from './GameLoop';
-import { PerfGovernor } from './Performance';
+import { PerfGovernor, PrepMode } from './Performance';
 import { Gems } from './Gems';
 import { Wildlife } from './Wildlife';
 import { Landmarks } from './Landmarks';
@@ -24,6 +24,7 @@ export function GameCanvas() {
       }}
     >
       <PerfGovernor />
+      <PrepMode />
       <Atmosphere />
       <DistantLands />
       <Clouds />

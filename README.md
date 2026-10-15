@@ -29,10 +29,11 @@ npm run test:sim   # headless bots climb the mountain using the real gameplay co
 |---|---|
 | W A S D | Move (relative to the camera) |
 | Arrow keys | Turn / tilt the camera (swap with WASD in the pause menu) |
-| Shift | Run |
+| Shift | Dash |
 | Mouse drag · scroll · + / − | Rotate camera · zoom (over-the-shoulder ↔ wide) |
 | C | Recenter the camera behind you |
 | Space | Action near signs, the register, water and the summit; otherwise rest when stopped, jump when moving |
+| Enter | Action near something; confirm / continue in dialogs |
 | F · J | Action · Jump |
 | E / Q / R | Eat / drink / rest |
 | M | Map |
@@ -43,7 +44,7 @@ npm run test:sim   # headless bots climb the mountain using the real gameplay co
 Shortcuts are ignored while typing in a text field.
 
 On touch devices: virtual joystick (left thumb), drag anywhere else to look, two-finger pinch
-to zoom, a Run toggle and a contextual Jump/Action button; eat, drink and rest live in the
+to zoom, a Dash toggle and a contextual Jump/Action button; eat, drink and rest live in the
 status panel. Add `?touch` to the URL to force touch controls on.
 
 ## Systems
@@ -156,6 +157,31 @@ status panel. Add `?touch` to the URL to force touch controls on.
 - **Home screen.** Drag to spin the mountain; the idle orbit resumes afterwards. Lighting follows
   the departure: purple pre-dawn with stars, orange sunrise, or afternoon daylight.
 - **Audio.** Soft synthesized cues for gems, exhaustion and the summit.
+
+## v0.5 additions (playtest polish)
+
+- **Pacing.** Movement is 10% slower, stamina drains 10% faster, and going off trail is 20% less
+  punishing. A steady walker takes about 7 minutes, and the bot that runs and uses red boosts takes
+  5.3. The expedition clock runs at 50× (6.7 h for a walker).
+- **Scoring v3** (`SCORE_VERSION = 3`). 20 points for every second under 15:00, plus 50 per gem,
+  500 for the summit, 200 for a clean climb and 100 for signing the register. Speed dominates: a
+  run 27 s faster outscores a slower one even if the slower run collected every gem. The board
+  restarts for v3, and the result card shows the breakdown.
+- **Unified HUD.** One top bar holds a progress edge, the mini-map with elevation and distance to
+  go, the place, objective and trail status (with return guidance), and the expedition clock, real
+  time, recenter and pause. One notification pill sits beneath it, with fade in and out.
+- **Controls.** Enter confirms dialogs (signs, kiosk, register) and acts on nearby objects. Recenter
+  gives a lower, upslope view. Run is now Dash, and food has an apple icon. HUD buttons no longer
+  re-fire on Space or Enter.
+- **Grounding.** The kneel pitches with the slope and is raised to its three ground contacts, and
+  the swinging foot lifts higher and samples the toe on steep uphill.
+- **World.** The glitchy snowdrift sheets and crater ice are removed. A range of four great peaks
+  north of the summit fades in on the final rim traverse: the reveal of what comes next.
+- **Summit.** The time-lapse warps time so night passes in a few seconds and golden hours
+  linger, ending in alpenglow.
+- **Home screen.** The near plane is pushed out (no z-fighting shimmer on phones), the shadow
+  pass renders once, and phones render at 30 fps with no touch drag. Lighting: magenta predawn
+  for an alpine start, orange sunrise, or clean daylight.
 
 ## Project layout
 

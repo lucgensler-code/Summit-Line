@@ -110,7 +110,7 @@ export function CameraGestures() {
   return <GestureLayer stick={false} />;
 }
 
-/** Joystick visual, contextual Jump/Action and Run. */
+/** Joystick visual, contextual Jump/Action and Dash. */
 export function TouchControls() {
   const [enabled] = useState(isTouchDevice);
   const [knob, setKnob] = useState({ active: false, cx: 0, cy: 0, x: 0, y: 0 });
@@ -148,9 +148,9 @@ export function TouchControls() {
       )}
       <div className="touch-buttons">
         {act && <div className="act-label">{prompt}</div>}
-        <button type="button" className={`tbtn jog ${jog ? 'on' : ''}`} onPointerDown={() => setJog((j) => !j)} aria-pressed={jog} aria-label="Run">
+        <button type="button" className={`tbtn jog ${jog ? 'on' : ''}`} onPointerDown={() => setJog((j) => !j)} aria-pressed={jog} aria-label="Dash">
           <IconRun size={18} />
-          <span>Run</span>
+          <span>Dash</span>
         </button>
         <button type="button" className={`tbtn main ${act ? 'act' : 'jump'}`} onPointerDown={() => queueAction('interact')}>
           {act ? 'Action' : 'Jump'}

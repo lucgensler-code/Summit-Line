@@ -109,7 +109,7 @@ export function Leaderboard({ highlightId }: { highlightId?: string }) {
         </div>
       )}
       <p className="lb-foot">
-        Times are real-world play time. Score = speed (up to 6,000) + 150 per gem + 1,000 summit + clean climb 400 + register 200.
+        Times are real-world play time. Score = 20 points per second under 15:00 + 50 per gem + 500 summit + 200 clean climb + 100 register.
         {source === 'shared' ? ' Each player’s five best runs can appear.' : ''}
       </p>
     </Modal>

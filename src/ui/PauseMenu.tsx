@@ -16,7 +16,7 @@ export function ControlsList() {
         <dt>{swapped ? 'W A S D' : 'Arrow keys'}</dt>
         <dd>Turn and tilt the camera</dd>
         <dt>Shift</dt>
-        <dd>Run — faster, burns stamina</dd>
+        <dd>Dash — faster, burns stamina</dd>
         <dt>Mouse drag · Scroll · + / −</dt>
         <dd>Rotate camera · Zoom</dd>
         <dt>C</dt>
@@ -39,17 +39,17 @@ export function ControlsList() {
         <dt>Two-finger pinch</dt>
         <dd>Zoom from over-the-shoulder to wide view</dd>
         <dt>Buttons</dt>
-        <dd>Run, Jump/Action; eat, drink and rest in the status panel</dd>
+        <dd>Dash, Jump/Action; eat, drink and rest in the status panel</dd>
       </dl>
       <h3>Mountaineering tips</h3>
       <ul>
         <li>The trail and boot track are far cheaper than cross-country travel.</li>
         <li>Steep uphill and deep snow drain stamina fast. Stop or rest to recover.</li>
         <li>The hatched end of the stamina bar is energy you have burned — only food restores it.</li>
-        <li>Low hydration slows recovery and makes running costly. Drink before you are thirsty.</li>
+        <li>Low hydration slows recovery and makes dashing costly. Drink before you are thirsty.</li>
         <li>Green gems (on the steep cut-offs) restore stamina; red gems (at the start of long gentle stretches) give 15 s of extra speed — run with them.</li>
         <li>Eat and drink on the move: water gives an instant stamina lift, food restores energy.</li>
-        <li>Score = speed (up to 6,000) + 150 per gem + 1,000 for the summit + 400 clean climb + 200 for signing the register.</li>
+        <li>Score is mostly speed: 20 points for every second under 15:00, plus 50 per gem, 500 for the summit, 200 for a clean climb and 100 for signing the register.</li>
         <li>Refill water at Obsidian Tarn; there is none higher up.</li>
       </ul>
     </div>

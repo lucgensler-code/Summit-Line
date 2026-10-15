@@ -730,8 +730,10 @@ function scatterAll(W: World) {
     W.spires.push(it);
     addCollider(W, it.x, it.z, 0.9 * it.s);
   }, 1.2, 2.6);
-  scatter(160, 6000, polar(36, 230), (x, z, h, sl) => snowCover(x, z, h, sl) > 0.55 && clearOf(x, z, 3.5), (it) => W.drifts.push(it), 1.2, 3.4);
-  scatter(8, 3000, polar(RIM_R - 26, RIM_R + 22), (x, z, h, sl) => clearOf(x, z, 2.5) && sl < 1.6 && h > 300, (it) => W.ice.push(it), 0.6, 1.5);
+  // v0.5: snowdrift humps and crater ice removed — on steep snow they stuck out as flat, glitchy
+  // sheets. The snowfield reads cleanly without them.
+  scatter(0, 6000, polar(36, 230), (x, z, h, sl) => snowCover(x, z, h, sl) > 0.55 && clearOf(x, z, 3.5), (it) => W.drifts.push(it), 1.2, 3.4);
+  scatter(0, 3000, polar(RIM_R - 26, RIM_R + 22), (x, z, h, sl) => clearOf(x, z, 2.5) && sl < 1.6 && h > 300, (it) => W.ice.push(it), 0.6, 1.5);
   // Far forest beyond the playable boundary softens the transition to the foothills.
   scatter(2200, 12000, polar(BOUNDARY_R + 10, HALF * 1.38), (x, z, h) => Math.max(Math.abs(x), Math.abs(z)) < HALF - 6 && h < TREELINE_H, (it) => W.trees.push({ ...it, s: 0.9 + it.s * 0.5, y: it.y - 0.3 }), 0.4, 1.2);
 

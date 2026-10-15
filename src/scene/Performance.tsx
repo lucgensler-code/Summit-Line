@@ -1,5 +1,7 @@
 import { useFrame, useThree } from '@react-three/fiber';
 import { useEffect, useRef } from 'react';
+import type * as THREE from 'three';
+import { useGame } from '../game/store';
 
 /** Live numbers for the optional FPS overlay (F3 or ?fps). Written by the governor, read by the DOM. */
 export const perfStats = { fps: 0, p95: 0, calls: 0, tris: 0, dpr: 1, tier: 0 };
@@ -30,6 +32,13 @@ export function PerfGovernor() {
     const now = performance.now();
     const ft = now - last.current;
     last.current = now;
+    // The home screen is deliberately throttled on phones; only measure while climbing.
+    if (useGame.getState().phase === 'prep') {
+      frames.current = [];
+      window0.current = now;
+      grace.current = Math.max(grace.current, now + 3000);
+      return;
+    }
     if (ft > 0 && ft < 1000) frames.current.push(ft);
     if (now - window0.current < 2000) return;
     window0.current = now;
@@ -63,6 +72,37 @@ export function PerfGovernor() {
       }
     }
   });
+  return null;
+}
+
+/**
+ * Home screen (v0.5): the mountain is viewed from ~1 km away, so
+ *  - the camera near plane is pushed out (much better depth precision: no shimmering /
+ *    z-fighting between the trail ribbon, terrain and trees on phone GPUs),
+ *  - the shadow map is rendered once instead of every frame,
+ *  - on touch devices the scene renders at ~30 fps — it is a slow backdrop behind the planner.
+ */
+export function PrepMode() {
+  const { gl, camera, setFrameloop, invalidate } = useThree();
+  const phase = useGame((s) => s.phase);
+  useEffect(() => {
+    const prep = phase === 'prep';
+    const cam = camera as THREE.PerspectiveCamera;
+    cam.near = prep ? 4 : 0.2;
+    cam.updateProjectionMatrix();
+    gl.shadowMap.autoUpdate = !prep;
+    gl.shadowMap.needsUpdate = true;
+    if (!prep || !isTouch()) {
+      setFrameloop('always');
+      return;
+    }
+    setFrameloop('demand');
+    const id = setInterval(() => invalidate(), 33);
+    return () => {
+      clearInterval(id);
+      setFrameloop('always');
+    };
+  }, [phase, gl, camera, setFrameloop, invalidate]);
   return null;
 }
 

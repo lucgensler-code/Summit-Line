@@ -145,6 +145,12 @@ export function SummitScreen() {
             {s.gems.total}/{s.gems.available} gems · {s.exhaustions === 0 ? 'clean climb' : `exhausted ${s.exhaustions}×`}
             {newBest && <span className="new-best"> · 🏆 personal best</span>}
           </p>
+          <p className="result-why">
+            {s.score.lines
+              .filter((l) => l.points > 0)
+              .map((l) => `${l.id === 'speed' ? 'Time' : l.label.replace(/ \(.*\)$/, '')} ${l.points.toLocaleString('en-US')}`)
+              .join(' + ')}
+          </p>
           <form
             className={`hs-entry ${s.qualifies ? 'qualifies' : ''}`}
             onSubmit={(e) => {

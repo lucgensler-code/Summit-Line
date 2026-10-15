@@ -25,6 +25,11 @@ export function useDesktopControls(canvasHost: React.RefObject<HTMLElement | nul
       const target = e.target as HTMLElement | null;
       if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return;
       if (g.phase !== 'playing' && target && target.tagName === 'BUTTON' && (e.code === 'Space' || e.code === 'Enter')) return;
+      // While climbing, a HUD button that kept focus after a click must not also fire on Space/Enter.
+      if (g.phase === 'playing' && target && target.tagName === 'BUTTON' && (e.code === 'Space' || e.code === 'Enter')) {
+        e.preventDefault();
+        target.blur();
+      }
       const overlay = g.mapOpen || g.logOpen || g.registerOpen || g.lbOpen || !!g.reading;
       if ((e.code === 'Escape' || e.code === 'KeyP') && !overlay) {
         if (g.phase === 'playing') g.pause();
@@ -53,6 +58,11 @@ export function useDesktopControls(canvasHost: React.RefObject<HTMLElement | nul
       input.keys.add(e.code);
       if (e.code === 'Space') queueAction('primary');
       if (e.code === 'KeyF') queueAction('interact');
+      // Enter: act on a nearby sign / register / water / summit only (never jumps).
+      if ((e.code === 'Enter' || e.code === 'NumpadEnter') && g.hud?.prompt) {
+        e.preventDefault();
+        queueAction('interact');
+      }
       if (e.code === 'KeyJ') queueAction('jump');
       if (e.code === 'KeyE') queueAction('eat');
       if (e.code === 'KeyQ') queueAction('drink');
@@ -74,8 +84,9 @@ export function useDesktopControls(canvasHost: React.RefObject<HTMLElement | nul
     let lx = 0;
     let ly = 0;
     const onDown = (e: PointerEvent) => {
-      // Touch is handled by the gesture layer while climbing; on the home screen any pointer spins the mountain.
-      if (e.pointerType === 'touch' && useGame.getState().phase !== 'prep') return;
+      // Touch is handled by the gesture layer while climbing. On the home screen only the mouse
+      // spins the mountain — on phones it is a smooth, slowly drifting backdrop (v0.5).
+      if (e.pointerType === 'touch') return;
       dragging = true;
       lx = e.clientX;
       ly = e.clientY;

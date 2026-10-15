@@ -2631,3 +2631,313 @@ textarea {
     top: calc(var(--safe-t) + 112px);
   }
 }
+
+/* ================================================================== v0.5 unified top bar */
+.hud-bar-wrap {
+  position: relative;
+  align-self: center;
+  width: min(860px, 100%);
+  pointer-events: none;
+}
+.hud-bar {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 12px;
+  padding: 8px 10px 7px 7px;
+  border-radius: 16px;
+  background: rgba(12, 16, 22, 0.74);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.25);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  overflow: visible;
+  transition: border-color 0.3s, box-shadow 0.3s;
+}
+.hud-bar.trail-near {
+  border-color: rgba(255, 201, 58, 0.5);
+}
+.hud-bar.trail-off {
+  border-color: rgba(255, 90, 72, 0.7);
+  box-shadow: 0 0 0 1px rgba(255, 90, 72, 0.3), 0 4px 18px rgba(0, 0, 0, 0.3);
+}
+/* progress: a thin line integrated into the top edge */
+.hb-progress {
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  top: 0;
+  height: 3px;
+  border-radius: 0 0 3px 3px;
+  background: rgba(255, 255, 255, 0.14);
+  overflow: hidden;
+}
+.hb-progress i {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.4s linear;
+}
+/* left: navigation */
+.hb-nav {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--ink);
+  cursor: pointer;
+  text-align: left;
+  min-width: 0;
+}
+.hb-nav .minimap {
+  flex: none;
+}
+.hb-alt {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  white-space: nowrap;
+}
+.hb-alt b {
+  font-size: 20px;
+  font-weight: 780;
+  letter-spacing: -0.02em;
+  line-height: 1.05;
+  font-variant-numeric: tabular-nums;
+}
+.hb-alt b small {
+  font-size: 10.5px;
+  font-weight: 600;
+  margin-left: 2px;
+  color: var(--ink-dim);
+}
+.hb-alt em {
+  font-style: normal;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ink-dim);
+  font-variant-numeric: tabular-nums;
+}
+/* centre: place · objective · trail status */
+.hb-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 2px;
+  min-width: 0;
+  padding: 0 4px;
+  border-left: 1px solid rgba(255, 255, 255, 0.1);
+  border-right: 1px solid rgba(255, 255, 255, 0.1);
+}
+.hb-place {
+  font-size: 10.5px;
+  font-weight: 760;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #ffd2a1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+.hb-objective {
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--ink);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  max-width: 100%;
+}
+.hud-bar .trail-chip {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 5px;
+  font-size: 11.5px;
+  line-height: 1.3;
+  max-width: 100%;
+}
+.hud-bar .trail-chip > i {
+  margin-top: 3.5px;
+}
+.hud-bar .trail-chip .guide {
+  display: inline;
+  font-weight: 650;
+  color: var(--ink);
+}
+.hud-bar .trail-chip .ico.arrow {
+  vertical-align: -2px;
+}
+/* right: controls over time */
+.hb-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+.hb-icons {
+  display: flex;
+  gap: 6px;
+}
+.hb-icons .hud-icon {
+  width: 32px;
+  height: 32px;
+  position: relative;
+}
+/* generous invisible hit area for fingers */
+.hb-icons .hud-icon::after {
+  content: '';
+  position: absolute;
+  inset: -6px -3px;
+}
+.hb-time {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--ink);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.hb-time .sim-time {
+  font-size: 15px;
+}
+.hb-time .real-time {
+  border-left: none;
+  padding-left: 0;
+  font-size: 11.5px;
+}
+.hud-bar .status-details {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 2;
+  pointer-events: auto;
+}
+/* notification pill attached under the bar */
+.hb-notice {
+  position: absolute;
+  left: 50%;
+  top: calc(100% + 6px);
+  transform: translateX(-50%);
+  max-width: min(420px, 92vw);
+  display: flex;
+  justify-content: center;
+}
+.hb-notice .notice {
+  padding: 5px 13px;
+  border-radius: 999px;
+  background: rgba(12, 16, 22, 0.84);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  font-size: 12.5px;
+  line-height: 1.35;
+  text-align: center;
+  animation: noticeIn 0.25s ease-out;
+  transition: opacity 0.25s, transform 0.25s;
+}
+.hb-notice .notice.leaving {
+  opacity: 0;
+  transform: translateY(-4px);
+}
+.hb-notice .notice.good {
+  border-color: rgba(143, 209, 158, 0.6);
+}
+.hb-notice .notice.warn {
+  border-color: rgba(255, 196, 90, 0.75);
+}
+@keyframes noticeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+}
+
+/* phones, portrait — the sketch: minimap over elevation | place · objective · status | controls over time */
+@media (max-width: 640px) {
+  .hud-bar {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    column-gap: 8px;
+    padding: 8px 8px 7px 6px;
+    align-items: start;
+  }
+  .hb-nav {
+    flex-direction: column;
+    gap: 3px;
+    align-items: center;
+    text-align: center;
+  }
+  .hb-nav .minimap {
+    width: 50px !important;
+    height: 50px !important;
+  }
+  .hb-alt {
+    align-items: center;
+  }
+  .hb-alt b {
+    font-size: 14px;
+  }
+  .hb-alt em {
+    font-size: 10px;
+  }
+  .hb-center {
+    align-self: center;
+    padding: 0 2px;
+  }
+  .hb-place {
+    font-size: 10px;
+    letter-spacing: 0.1em;
+  }
+  .hb-objective {
+    font-size: 11.5px;
+  }
+  .hud-bar .trail-chip {
+    font-size: 11px;
+  }
+  .hb-time .sim-time {
+    font-size: 13.5px;
+  }
+  .hb-time .real-time {
+    font-size: 11px;
+  }
+}
+/* phones, landscape: one compact row */
+@media (orientation: landscape) and (max-height: 520px) {
+  .hud-bar-wrap {
+    width: min(720px, 100%);
+  }
+  .hud-bar {
+    padding: 6px 9px 5px 6px;
+  }
+  .hb-nav .minimap {
+    width: 44px !important;
+    height: 44px !important;
+  }
+  .hb-alt b {
+    font-size: 16px;
+  }
+  .hb-objective {
+    -webkit-line-clamp: 1;
+    font-size: 11.5px;
+  }
+  .hb-right {
+    flex-direction: row-reverse;
+    align-items: center;
+    gap: 8px;
+  }
+}
+.result-why {
+  margin: -6px 0 12px;
+  font-size: 11.5px;
+  color: var(--ink-dim);
+  font-variant-numeric: tabular-nums;
+}

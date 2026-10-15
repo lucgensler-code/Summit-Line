@@ -113,15 +113,38 @@ export function currentHour() {
   // Home screen lighting follows the chosen start: alpine start = purple pre-dawn with stars,
   // sunrise = warm orange morning, late start = full afternoon daylight. Eases between themes.
   const h = g.loadout.departureHour;
-  const target = h < 6 ? 4.8 : h < 8 ? 6.45 : 14;
+  const target = h < 6 ? 5.55 : h < 8 ? 6.6 : 14;
   const now = performance.now() / 1000;
   const dt = Math.min(0.25, now - prepEase.t);
   prepEase.t = now;
-  if (prepEase.h < 0) prepEase.h = target;
-  prepEase.h += (target - prepEase.h) * (1 - Math.exp(-dt * 2.2));
+  const e = 1 - Math.exp(-dt * 2.2);
+  if (prepEase.h < 0) {
+    prepEase.h = target;
+    prepEase.alpine = h < 6 ? 1 : 0;
+    prepEase.morning = h >= 6 && h < 8 ? 1 : 0;
+  }
+  prepEase.h += (target - prepEase.h) * e;
+  prepEase.alpine += ((h < 6 ? 1 : 0) - prepEase.alpine) * e;
+  prepEase.morning += ((h >= 6 && h < 8 ? 1 : 0) - prepEase.morning) * e;
   return prepEase.h;
 }
-const prepEase = { h: -1, t: 0 };
+/** Home-screen theme state: eased hour plus how strongly each start-time look is applied. */
+const prepEase = { h: -1, t: 0, alpine: 0, morning: 0 };
+
+/** Home-screen looks (v0.5): pink/magenta predawn alpenglow, and a warm orange sunrise. */
+const THEME_ALPINE: Key = { h: 0, top: '#2b1d5e', horizon: '#e0709e', sun: '#ff86ad', sunI: 1.1, hemiSky: '#9a74b4', hemiGround: '#2c1e2c', hemiI: 1.0, fog: 0.85 };
+const THEME_MORNING: Key = { h: 0, top: '#3b5ea8', horizon: '#ff9850', sun: '#ff9d50', sunI: 2.6, hemiSky: '#d2ad92', hemiGround: '#5e4030', hemiI: 1.25, fog: 0.95 };
+function applyTheme(pal: typeof PAL, th: Key, w: number) {
+  if (w < 0.001) return;
+  pal.top.lerp(cB.set(th.top), w);
+  pal.horizon.lerp(cB.set(th.horizon), w);
+  pal.sun.lerp(cB.set(th.sun), w);
+  pal.hemiSky.lerp(cB.set(th.hemiSky), w);
+  pal.hemiGround.lerp(cB.set(th.hemiGround), w);
+  pal.sunI += (th.sunI - pal.sunI) * w;
+  pal.hemiI += (th.hemiI - pal.hemiI) * w;
+  pal.fog += (th.fog - pal.fog) * w;
+}
 
 // ---------------------------------------------------------------------------------------------
 
@@ -214,6 +237,10 @@ export function Atmosphere() {
   useFrame(({ camera }) => {
     const hour = currentHour();
     const pal = samplePalette(hour);
+    if (useGame.getState().phase === 'prep') {
+      applyTheme(pal, THEME_ALPINE, prepEase.alpine * 0.85);
+      applyTheme(pal, THEME_MORNING, prepEase.morning * 0.7);
+    }
     sunDirection(hour, dir);
     const light = daylight(hour);
     const p = runtime.player;
@@ -304,8 +331,6 @@ function peakGeometry(radius: number, height: number, seed: number, jagged: numb
 }
 
 const PEAKS: { x: number; z: number; r: number; h: number; jag: number; snow: number; seed: number }[] = [
-  { x: -260, z: -2050, r: 820, h: 330, jag: 0.5, snow: 0.6, seed: 3 }, // "Middle sister"
-  { x: -760, z: -3100, r: 950, h: 390, jag: 0.8, snow: 0.55, seed: 7 }, // jagged north peak
   { x: 1850, z: 250, r: 750, h: 230, jag: 1.1, snow: 0.7, seed: 11 }, // broken eastern crags
   { x: 1650, z: 2300, r: 900, h: 300, jag: 0.25, snow: 0.62, seed: 19 }, // smooth southern volcano
   { x: -2300, z: 900, r: 1100, h: 180, jag: 0.6, snow: 0.9, seed: 23 },
@@ -315,8 +340,52 @@ const PEAKS: { x: number; z: number; r: number; h: number; jag: number; snow: nu
   { x: -3300, z: -1300, r: 1600, h: 240, jag: 0.7, snow: 0.8, seed: 41 },
 ];
 
+/**
+ * The summit reveal (v0.5): the range beyond Cindercrest, north of the summit, hidden from the
+ * trail by the mountain itself. Taller than Cindercrest so it rises above the horizon from the
+ * top: a glaciated "next mountain", and two more great peaks behind it — the levels to come.
+ */
+const REVEAL: { x: number; z: number; r: number; h: number; jag: number; snow: number; seed: number; haze: number }[] = [
+  { x: 380, z: -2550, r: 1000, h: 900, jag: 0.9, snow: 0.42, seed: 53, haze: 0.2 }, // the next mountain
+  { x: -1350, z: -3300, r: 1250, h: 1050, jag: 0.7, snow: 0.45, seed: 61, haze: 0.38 },
+  { x: 1900, z: -3800, r: 1300, h: 930, jag: 1.0, snow: 0.48, seed: 67, haze: 0.48 },
+  { x: -300, z: -4700, r: 1500, h: 1150, jag: 0.6, snow: 0.5, seed: 71, haze: 0.58 },
+];
+
 export function DistantLands() {
   const geos = useMemo(() => PEAKS.map((p) => peakGeometry(p.r, p.h, p.seed, p.jag, p.snow)), []);
+  const revealGeos = useMemo(() => REVEAL.map((p) => peakGeometry(p.r, p.h, p.seed, p.jag, p.snow)), []);
+  // Distance fog would erase peaks this far out, so they skip scene fog and get their own fixed
+  // atmospheric perspective instead: albedo dimmed, horizon colour added as emission.
+  const revealMats = useMemo(
+    () => REVEAL.map(() => new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 1, fog: false })),
+    [],
+  );
+  // Kept for the reveal: hidden on the home screen and on the way up, faded in on the final rim
+  // traverse, fully there for the summit celebration.
+  const reveal = useRef<THREE.Group>(null);
+  const fade = useRef(0);
+  useFrame((_, dt) => {
+    const g = useGame.getState();
+    const p = runtime.player;
+    const want = g.phase === 'summit' || (p && g.phase !== 'prep' && elevationFt(p.y) > 9950) ? 1 : 0;
+    fade.current += (want - fade.current) * (1 - Math.exp(-Math.min(dt, 0.1) * (want ? 1.2 : 6)));
+    if (want === 0 && fade.current < 0.01) fade.current = 0;
+    if (reveal.current) reveal.current.visible = fade.current > 0.005;
+    if (!reveal.current?.visible) return;
+    const pal = samplePalette(currentHour());
+    REVEAL.forEach((p, i) => {
+      const m = revealMats[i];
+      m.color.setScalar(1 - p.haze);
+      m.emissive.copy(pal.horizon).multiplyScalar(p.haze * 0.9);
+      const solid = fade.current > 0.995;
+      if (m.transparent === solid) {
+        m.transparent = !solid;
+        m.needsUpdate = true;
+      }
+      m.opacity = fade.current;
+    });
+  });
   return (
     <group>
       {PEAKS.map((p, i) => (
@@ -324,6 +393,11 @@ export function DistantLands() {
           <meshStandardMaterial vertexColors flatShading roughness={1} />
         </mesh>
       ))}
+      <group ref={reveal} visible={false}>
+        {REVEAL.map((p, i) => (
+          <mesh key={`r${i}`} geometry={revealGeos[i]} material={revealMats[i]} position={[p.x, -40, p.z]} />
+        ))}
+      </group>
 
     </group>
   );

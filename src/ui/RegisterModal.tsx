@@ -61,7 +61,7 @@ export function RegisterModal() {
   };
 
   return (
-    <Modal onClose={() => setOpen(false)} label="Climbers register" className="register">
+    <Modal onClose={() => setOpen(false)} onConfirm={() => (signed ? setOpen(false) : sign())} label="Climbers register" className="register">
       <div className="brand">OBSIDIAN TARN · CLIMBERS REGISTER</div>
       <h2>Sign in before the climb</h2>
       <p className="reg-why">
@@ -69,7 +69,12 @@ export function RegisterModal() {
         <b>+{SCORE_RULES.register} point</b> style bonus on your summit score.
       </p>
       {signed ? (
-        <p className="reg-done">✓ You signed this register on today's climb.</p>
+        <>
+          <p className="reg-done">✓ You signed this register on today's climb.</p>
+          <button type="button" className="btn primary reg-continue" onClick={() => setOpen(false)}>
+            Continue <kbd>Enter</kbd>
+          </button>
+        </>
       ) : (
         <form
           className="reg-form"

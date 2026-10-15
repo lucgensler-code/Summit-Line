@@ -38,11 +38,12 @@ export const IconBottle = (p: { size?: number }) => (
     <path d="M8 12.5h8" />
   </Svg>
 );
-/** Trail bar */
+/** Food (apple) */
 export const IconBar = (p: { size?: number }) => (
   <Svg {...p}>
-    <rect x="3" y="8" width="18" height="8" rx="2" transform="rotate(-20 12 12)" />
-    <path d="m8.2 8.9 2.7 7.6M13.6 7 16.3 14.6" />
+    <path d="M12 7.5c-1.6-1.3-5.5-1.6-6.6 2.2-1 3.4 1.2 8.6 3.6 9.6 1.1.5 2 0 3-.4 1 .4 1.9.9 3 .4 2.4-1 4.6-6.2 3.6-9.6-1.1-3.8-5-3.5-6.6-2.2z" />
+    <path d="M12 7.5c0-2 .8-3.6 2.6-4.3" />
+    <path d="M12.6 5.2c1.4-1.6 3.4-1.5 4.2-1.2-.4 1.6-2 2.6-4.2 1.2z" fill="currentColor" />
   </Svg>
 );
 /** Rest — kneeling climber under a tent line */

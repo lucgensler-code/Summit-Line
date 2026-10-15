@@ -48,12 +48,12 @@ export const WATER_PER_DRINK = 0.5;
 export const FOOD_KG = 0.25;
 /** Game seconds per real second. */
 /** Game seconds per real second: a typical ~6.5 min climb ≈ 6.5 h on the expedition clock. */
-export const TIME_SCALE = 55;
+export const TIME_SCALE = 50;
 /** Resting is a time-skip: the expedition clock runs this much faster while you sit. */
 export const REST_TIME_MULT = 4;
 
-export const WALK_SPEED = 6.4;
-export const JOG_SPEED = 12.4;
+export const WALK_SPEED = 5.76; // v0.5: −10%
+export const JOG_SPEED = 11.16;
 export const JUMP_VELOCITY = 5.2;
 export const GRAVITY = 16;
 export const GEM_RADIUS = 1.7;
@@ -284,6 +284,8 @@ export function stepPlayer(p: PlayerState, l: Loadout, intent: MoveIntent, dt: n
   } else if (p.onTrail && here.snow > 0.5) {
     factor = lerp(0.9, 0.72, soft) * (l.spikes ? 1.1 : 0.82);
   }
+  // v0.5: the off-trail slowdown is 20% gentler.
+  if (!p.onTrail) factor = 1 - (1 - factor) * 0.8;
   if (grade > 0) factor *= clamp(1 - grade * 0.85, 0.18, 1);
   else if (grade < -0.12) {
     const steep = -grade - 0.12;
@@ -398,7 +400,7 @@ export function stepPlayer(p: PlayerState, l: Loadout, intent: MoveIntent, dt: n
     const up = Math.max(grade, 0);
     effort += up * (wantsJog ? 7.5 : 6.2) * (l.poles ? 0.85 : 1);
     if (grade < -0.4) effort += (-grade - 0.4) * 2.5 * (l.poles ? 0.7 : 1);
-    effort += SURFACE_EFFORT[p.surface] * (p.onTrail ? 0 : 1);
+    effort += SURFACE_EFFORT[p.surface] * (p.onTrail ? 0 : 0.8); // v0.5: off-trail effort 20% gentler
     if (p.surface === 'snow') effort += lerp(1.2, 2.6, soft) * (l.spikes ? 0.75 : 1);
     else if (deepSnow) effort += lerp(0.2, 0.7, soft) * (l.spikes ? 0.6 : 1);
     effort *= 1 + Math.max(0, kg - 8) * 0.035;
@@ -418,7 +420,8 @@ export function stepPlayer(p: PlayerState, l: Loadout, intent: MoveIntent, dt: n
   p.limiter =
     hyd < 0.7 ? 'Dehydrated — slower recovery' : p.maxStamina < 60 ? 'Low energy — eat to restore' : cold ? 'Cold — slower recovery' : null;
   p.effort = effort;
-  p.stamina = clamp(p.stamina + (recover - effort) * dt, 0, p.maxStamina);
+  // v0.5: stamina drains 10% faster than v0.4.
+  p.stamina = clamp(p.stamina + (recover - effort * 1.1) * dt, 0, p.maxStamina);
   if (p.stamina <= 0.01 && !p.exhausted) {
     p.exhausted = true;
     p.exhaustions++;

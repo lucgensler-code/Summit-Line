@@ -106,7 +106,7 @@ export function GameLoop() {
       // Recenter: glide the camera behind the climber's direction of travel.
       if (input.recenter && p) {
         input.recenter = false;
-        recenterT.current = 0.7;
+        recenterT.current = 0.9;
       }
       if (input.lookDX !== 0 || keys.yaw !== 0) recenterT.current = 0;
       if (recenterT.current > 0 && p) {
@@ -114,7 +114,9 @@ export function GameLoop() {
         let d = p.heading + Math.PI - cam.yaw;
         d = Math.atan2(Math.sin(d), Math.cos(d));
         cam.yaw += d * (1 - Math.exp(-dt * 7));
-        cam.pitch += (0.3 - cam.pitch) * (1 - Math.exp(-dt * 5));
+        // v0.5: a lower, more upward-looking vantage that shows the slope you're climbing.
+        cam.pitch += (0.1 - cam.pitch) * (1 - Math.exp(-dt * 5));
+        if (cam.dist > 9) cam.dist += (9 - cam.dist) * (1 - Math.exp(-dt * 4));
       }
       if (touched && !runtime.cameraUsed) {
         runtime.cameraUsed = true;

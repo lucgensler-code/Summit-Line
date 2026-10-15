@@ -50,7 +50,7 @@ export const CINDERCREST: MountainDef = {
       name: 'Climbers Trail',
       miles: 5.8,
       difficulty: 'Strenuous',
-      estMinutes: [4, 7],
+      estMinutes: [5, 8],
       // v0.4 layout, derived from the trail's grade profile (scripts/simulate-ascent.ts → gems):
       //  · red (speed boost) at the START of the longer gentle sections, where the boost turns
       //    into distance instead of being wasted grinding up a hill — plus one for the final

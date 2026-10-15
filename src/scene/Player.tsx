@@ -38,6 +38,13 @@ function Limb({ len, w, color, children, jointRef, y = 0, x = 0 }: { len: number
   );
 }
 
+/** Kneel ground contacts in the climber's frame: [forward, sideways, height above the root]. */
+const KNEEL_CONTACTS: [number, number, number][] = [
+  [0.46, 0.11, -0.01], // planted front sole
+  [-0.05, -0.11, 0.035], // back knee
+  [-0.46, -0.11, 0.04], // back toe
+];
+
 /** Low-poly mountaineer rig with procedural walk / jog / idle / rest / summit animation. */
 export function Player() {
   const root = useRef<THREE.Group>(null);
@@ -69,6 +76,7 @@ export function Player() {
     if (!r) return;
     r.visible = !!p && phase !== 'prep';
     if (!p) return;
+    r.rotation.order = 'YXZ';
     r.rotation.y = p.heading;
 
     const g = gait.current;
@@ -107,6 +115,12 @@ export function Player() {
     let tR = -s * amp * (1 - g.air) + tuck * 0.6 - g.tired * 0.35 - lean;
     let kL = Math.max(0, -c) * amp * 1.3 * (1 - g.air) + g.air * 1.1 + 0.05 + g.tired * 0.5;
     let kR = Math.max(0, c) * amp * 1.3 * (1 - g.air) + g.air * 0.8 + 0.05 + g.tired * 0.5;
+    // Uphill: lift the swinging knee higher so the boot clears the slope ahead.
+    const up = clamp(p.grade, 0, 0.9) * (moving ? 1 : 0);
+    kL += up * 0.75 * Math.max(0, -c);
+    kR += up * 0.75 * Math.max(0, c);
+    tL -= up * 0.35 * Math.max(0, -c);
+    tR -= up * 0.35 * Math.max(0, c);
     tL = lerp(tL, -1.5, g.rest);
     kL = lerp(kL, 1.5, g.rest);
     tR = lerp(tR, 0.1, g.rest);
@@ -118,19 +132,27 @@ export function Player() {
       const reach = -Math.sin(thigh) * LEG * 0.85; // + forward
       const fx = p.x + fwdX * reach + fwdZ * side * 0.12;
       const fz = p.z + fwdZ * reach - fwdX * side * 0.12;
-      return heightAt(fx, fz);
+      // Sample heel and toe: on steep uphill the toe meets the slope first.
+      return Math.max(heightAt(fx, fz), heightAt(fx + fwdX * 0.2, fz + fwdZ * 0.2) - 0.02);
     };
     let rootY = p.y;
     // Ground pitch along the direction of travel (rise over run), for boots and kneeling.
     const ahead = heightAt(p.x + fwdX * 0.35, p.z + fwdZ * 0.35);
     const behind = heightAt(p.x - fwdX * 0.35, p.z - fwdZ * 0.35);
     const groundPitch = Math.atan2(ahead - behind, 0.7);
+    // Kneeling (v0.5): the whole body pitches with the slope, then the root is raised just enough
+    // that none of the three ground contacts (front sole, back knee, back toe) sinks in.
+    const kneelTilt = clamp(groundPitch, -0.4, 0.4) * 0.85 * g.rest;
+    r.rotation.x = lerp(r.rotation.x, -kneelTilt, k(8));
     if (g.rest > 0.5) {
-      // Kneeling: the trailing knee rests on the ground behind, the planted foot in front must
-      // not sink into an uphill slope.
-      const kneeH = heightAt(p.x - fwdX * 0.22, p.z - fwdZ * 0.22);
-      const footH = heightAt(p.x + fwdX * 0.42 + fwdZ * 0.12, p.z + fwdZ * 0.42 - fwdX * 0.12);
-      rootY = Math.max(Math.min(p.y, kneeH), footH - 0.12);
+      const sinT = Math.sin(kneelTilt);
+      let need = -Infinity;
+      for (const [f, side, y] of KNEEL_CONTACTS) {
+        const cx = p.x + fwdX * f + fwdZ * side;
+        const cz = p.z + fwdZ * f - fwdX * side;
+        need = Math.max(need, heightAt(cx, cz) - (y + f * sinT));
+      }
+      rootY = need;
     }
     if (p.jumpH <= 0 && g.rest < 0.5) {
       const hL = footGround(tL, 1);
@@ -174,7 +196,7 @@ export function Player() {
     const bob = moving ? Math.abs(Math.sin(g.phase)) * lerp(0.04, 0.09, g.blendJog) : 0;
     const breathe = Math.sin(t * (p.stamina < 30 ? 5 : 1.8)) * (p.stamina < 30 ? 0.02 : 0.008);
     if (body.current) {
-      body.current.position.y = lerp(body.current.position.y, bob - g.rest * 0.55 - g.tired * 0.12, k(14));
+      body.current.position.y = lerp(body.current.position.y, bob - g.rest * 0.48 - g.tired * 0.12, k(14));
     }
     if (torso.current) {
       const lean = 0.06 + g.blendJog * 0.22 + Math.max(g.lean, 0) * 0.35 + g.tired * 0.75 - g.summit * 0.15 + g.rest * 0.1;
@@ -367,8 +389,9 @@ export function CameraRig() {
       const far = wantOffset ? 1300 : 900;
       tmpPos.set(Math.sin(a) * far, 330 + Math.sin(t * 0.05) * 30, Math.cos(a) * far);
       tmpTarget.set(0, 170, 0);
-      camera.position.lerp(tmpPos, initialised.current === -2 ? 0.02 : 1);
-      look.current.lerp(tmpTarget, initialised.current === -2 ? 0.05 : 1);
+      // Frame-rate independent smoothing (the home screen may render at 30 fps on phones).
+      camera.position.lerp(tmpPos, initialised.current === -2 ? 1 - Math.exp(-dt * 1.2) : 1);
+      look.current.lerp(tmpTarget, initialised.current === -2 ? 1 - Math.exp(-dt * 3) : 1);
       initialised.current = -2;
       camera.lookAt(look.current);
       return;

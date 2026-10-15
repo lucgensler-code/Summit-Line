@@ -4,7 +4,6 @@
 //    readable by everyone who can open the game, writable only by that player (rules declared at
 //    publish). No credentials live in the client; the platform enforces who may write.
 
-import { loadRecords } from './records';
 import { SCORE_RULES, SCORE_VERSION, maxPossibleScore, speedPoints, MIN_PLAUSIBLE_SECONDS } from './scoring';
 
 export interface LbEntry {
@@ -87,8 +86,8 @@ export function validSubmission(s: LbSubmission) {
 
 // ------------------------------------------------------------------ local backend
 
-const LOCAL_KEY = 'summitline.highscores.v2';
-const LOCAL_KEY_V1 = 'summitline.highscores.v1';
+// v0.5 changed pacing and scoring, so the board restarts: older runs aren't comparable.
+const LOCAL_KEY = 'summitline.highscores.v3';
 interface LocalRow extends Omit<LbEntry, 'mine'> {
   routeKey: string;
   scoreVersion: number;
@@ -115,34 +114,7 @@ function saveLocal(rows: LocalRow[]) {
   }
 }
 
-/**
- * One-time migration of v0.3 high scores (scoring model v1) to the v2 model: the score is
- * recomputed from the run's time, and its gems / register come from the matching expedition-log
- * entry. Clean-climb data didn't exist then, so migrated runs never get that bonus.
- */
-function migrateV1() {
-  let v1: (Omit<LocalRow, 'scoreVersion'> & { routeKey: string })[];
-  try {
-    if (localStorage.getItem(LOCAL_KEY) !== null) return;
-    v1 = readJson(LOCAL_KEY_V1);
-  } catch {
-    return;
-  }
-  const recs = loadRecords();
-  const out: LocalRow[] = v1.map((r) => {
-    const rec = recs.reduce<(typeof recs)[number] | undefined>(
-      (best, x) => (Math.abs(x.realSeconds - r.realSeconds) < 1.5 && (!best || Math.abs(x.realSeconds - r.realSeconds) < Math.abs(best.realSeconds - r.realSeconds)) ? x : best),
-      undefined,
-    );
-    const gems = Math.min(rec?.gems.total ?? 0, 11);
-    const score = SCORE_RULES.summit + speedPoints(r.realSeconds) + gems * SCORE_RULES.perGem + (rec?.registerSigned ? SCORE_RULES.register : 0);
-    return { ...r, score, gems, scoreVersion: SCORE_VERSION, migrated: true };
-  });
-  saveLocal(out);
-}
-
 function loadLocal(): LocalRow[] {
-  migrateV1();
   return readJson<LocalRow>(LOCAL_KEY).filter((r) => r.scoreVersion === SCORE_VERSION);
 }
 
