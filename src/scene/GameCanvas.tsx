@@ -3,6 +3,7 @@ import { AdaptiveDpr } from '@react-three/drei';
 import * as THREE from 'three';
 import { Atmosphere, Clouds, DistantLands, Spindrift } from './Environment';
 import { GameLoop } from './GameLoop';
+import { Gems } from './Gems';
 import { Landmarks } from './Landmarks';
 import { CameraRig, Player } from './Player';
 import { Terrain, Trail } from './Terrain';
@@ -32,6 +33,7 @@ export function GameCanvas() {
       <Shrubs />
       <TrailMarkers />
       <Landmarks />
+      <Gems />
       <Player />
       <Spindrift />
       <CameraRig />

@@ -14,6 +14,7 @@ import {
   surfaceAt,
   type Surface,
 } from './world';
+import type { GemKind } from './routes';
 
 export interface Loadout {
   departureHour: number;
@@ -46,10 +47,17 @@ export const BASE_PACK_KG = 6.5;
 export const WATER_PER_DRINK = 0.5;
 export const FOOD_KG = 0.25;
 /** Game seconds per real second. */
-export const TIME_SCALE = 26;
+export const TIME_SCALE = 30;
+/** Resting is a time-skip: the expedition clock runs this much faster while you sit. */
+export const REST_TIME_MULT = 4;
 
-export const WALK_SPEED = 3.6;
-export const JOG_SPEED = 6.6;
+export const WALK_SPEED = 4.5;
+export const JOG_SPEED = 7.9;
+export const JUMP_VELOCITY = 5.2;
+export const GRAVITY = 16;
+export const GEM_RADIUS = 2.0;
+export const SPEED_BOOST = { mult: 1.4, seconds: 12 };
+export const GREEN_GEM_FRACTION = 0.35;
 
 export function packWeight(l: Loadout, water = l.waterL, food = l.food) {
   let kg = BASE_PACK_KG + water + food * FOOD_KG;
@@ -60,7 +68,7 @@ export function packWeight(l: Loadout, water = l.waterL, food = l.food) {
   return kg;
 }
 
-export type Activity = 'idle' | 'walk' | 'jog' | 'rest' | 'exhausted' | 'summit';
+export type Activity = 'idle' | 'walk' | 'jog' | 'jump' | 'rest' | 'exhausted' | 'summit';
 
 export interface PlayerState {
   x: number;
@@ -101,6 +109,21 @@ export interface PlayerState {
   lastY: number;
   boundaryWarn: number;
   nearWater: boolean;
+  /** height above ground while jumping */
+  jumpH: number;
+  vy: number;
+  /** seconds of landing recovery left */
+  landT: number;
+  gems: Record<string, boolean>;
+  gemCounts: { green: number; red: number };
+  /** realTime until which the red-gem speed boost lasts */
+  boostUntil: number;
+  waterUsed: number;
+  foodUsed: number;
+  /** furthest distance along the route reached (for the map's explored track) */
+  maxProgress: number;
+  /** why stamina recovery is limited right now, if it is */
+  limiter: string | null;
 }
 
 export interface MoveIntent {
@@ -113,7 +136,8 @@ export interface MoveIntent {
 export type GameEvent =
   | { type: 'checkpoint'; id: string; name: string }
   | { type: 'toast'; text: string; tone?: 'info' | 'warn' | 'good' }
-  | { type: 'exhausted' };
+  | { type: 'exhausted' }
+  | { type: 'gem'; kind: GemKind; x: number; y: number; z: number };
 
 export function createPlayer(l: Loadout): PlayerState {
   const W = getWorld();
@@ -155,6 +179,16 @@ export function createPlayer(l: Loadout): PlayerState {
     lastY: th.y,
     boundaryWarn: 0,
     nearWater: false,
+    jumpH: 0,
+    vy: 0,
+    landT: 0,
+    gems: {},
+    gemCounts: { green: 0, red: 0 },
+    boostUntil: 0,
+    waterUsed: 0,
+    foodUsed: 0,
+    maxProgress: 0,
+    limiter: null,
   };
 }
 
@@ -162,6 +196,7 @@ export const clockHour = (p: PlayerState, l: Loadout) => l.departureHour + p.gam
 
 /** 0 before dawn … 1 in full daylight. */
 export function daylight(hour: number) {
+  hour = ((hour % 24) + 24) % 24;
   return smoothstep(5.4, 7.0, hour) * (1 - smoothstep(18.5, 20.2, hour));
 }
 
@@ -200,7 +235,7 @@ export function stepPlayer(p: PlayerState, l: Loadout, intent: MoveIntent, dt: n
   }
   dt = Math.min(dt, 0.1);
   p.realTime += dt;
-  p.gameTime += dt * TIME_SCALE;
+  p.gameTime += dt * TIME_SCALE * (p.resting ? REST_TIME_MULT : 1);
   const hour = clockHour(p, l);
   const light = daylight(hour);
   const soft = snowSoftness(hour);
@@ -244,8 +279,15 @@ export function stepPlayer(p: PlayerState, l: Loadout, intent: MoveIntent, dt: n
   factor *= clamp(1 - Math.max(0, kg - 9) * 0.012, 0.75, 1);
   // Darkness without a headlamp makes route-finding slow.
   if (light < 0.35 && !l.headlamp) factor *= p.onTrail ? 0.85 : 0.7;
-  if (p.hydration < 15) factor *= 0.85;
-
+  if (p.hydration < 15) factor *= 0.88;
+  const boosted = p.realTime < p.boostUntil;
+  if (boosted) factor *= SPEED_BOOST.mult;
+  if (p.landT > 0) {
+    factor *= 0.55;
+    p.landT = Math.max(0, p.landT - dt);
+  }
+  // Hydration 1 = well hydrated … 0 = badly dehydrated. Effects ramp in gradually below 60%.
+  const hyd = smoothstep(8, 60, p.hydration);
   let target = 0;
   if (mag > 0) {
     target = (wantsJog ? JOG_SPEED : WALK_SPEED) * factor * (wantsJog ? 1 : mag);
@@ -271,7 +313,9 @@ export function stepPlayer(p: PlayerState, l: Loadout, intent: MoveIntent, dt: n
   // ---- collisions (tree trunks, boulders, cairns)
   tmpCols.length = 0;
   const cols = collidersNear(nx, nz);
+  const airborne = p.jumpH > 0.35;
   for (const c of cols) {
+    if (airborne && c.r < 1.3) continue; // hop over cairns and small boulders
     const dx = nx - c.x;
     const dz = nz - c.z;
     const rr = c.r + 0.35;
@@ -305,6 +349,16 @@ export function stepPlayer(p: PlayerState, l: Loadout, intent: MoveIntent, dt: n
   p.x = nx;
   p.z = nz;
   const ny = heightAt(nx, nz);
+  // Vertical motion for jumps (height kept relative to the ground).
+  if (p.jumpH > 0 || p.vy > 0) {
+    p.vy -= GRAVITY * dt;
+    p.jumpH += p.vy * dt;
+    if (p.jumpH <= 0) {
+      p.jumpH = 0;
+      p.vy = 0;
+      p.landT = 0.22;
+    }
+  }
   if (ny > p.lastY) p.elevGain += ny - p.lastY;
   p.lastY = ny;
   p.y = ny;
@@ -322,7 +376,7 @@ export function stepPlayer(p: PlayerState, l: Loadout, intent: MoveIntent, dt: n
   const elevFt = elevationFt(p.y);
   let effort = 0;
   if (moving) {
-    effort += wantsJog ? 3.0 : 0.45;
+    effort += wantsJog ? 3.0 * lerp(1.5, 1, hyd) : 0.45;
     const up = Math.max(grade, 0);
     effort += up * (wantsJog ? 10 : 6.2) * (l.poles ? 0.85 : 1);
     if (grade < -0.4) effort += (-grade - 0.4) * 2.5 * (l.poles ? 0.7 : 1);
@@ -334,14 +388,15 @@ export function stepPlayer(p: PlayerState, l: Loadout, intent: MoveIntent, dt: n
   }
   const cold = (elevFt > 9000 || hour < 7) && !l.insulated;
   if (cold) effort += 0.35;
-  if (p.hydration < 25) effort *= 1.35;
 
   let recover = 0;
   if (p.resting) recover = 13;
   else if (!moving) recover = 6;
   else if (!wantsJog) recover = 1.6 * (1 - Math.max(grade, 0) * 1.2);
-  if (p.hydration < 25) recover *= 0.6;
+  recover *= lerp(0.45, 1, hyd);
   if (cold) recover *= 0.8;
+  p.limiter =
+    hyd < 0.7 ? 'Dehydrated — slower recovery' : p.maxStamina < 60 ? 'Low energy — eat to restore' : cold ? 'Cold — slower recovery' : null;
   p.effort = effort;
   p.stamina = clamp(p.stamina + (recover - effort) * dt, 0, p.maxStamina);
   if (p.stamina <= 0.01 && !p.exhausted) {
@@ -355,14 +410,17 @@ export function stepPlayer(p: PlayerState, l: Loadout, intent: MoveIntent, dt: n
   }
 
   // Energy reserves: max stamina drains with calories burned.
-  p.maxStamina = clamp(p.maxStamina - dt * (moving ? 0.045 + effort * 0.017 : 0.008), 30, 100);
+  // Tuned ~10% harsher per climb than v0.1 (the climb is now ~25% shorter in real time).
+  const drain = (moving ? 0.062 + effort * 0.023 : 0.01) * lerp(1.6, 1, hyd);
+  p.maxStamina = clamp(p.maxStamina - dt * drain, 30, 100);
   // Hydration
   const heat = 1 + 0.4 * smoothstep(10, 14, hour) * (elevFt < 9500 ? 1 : 0.5);
-  p.hydration = clamp(p.hydration - dt * (0.07 + effort * 0.026) * heat, 0, 100);
+  p.hydration = clamp(p.hydration - dt * (0.09 + effort * 0.032) * heat, 0, 100);
 
   // ---- activity for animation
   if (p.resting) p.activity = 'rest';
   else if (p.exhausted && !moving) p.activity = 'exhausted';
+  else if (p.jumpH > 0) p.activity = 'jump';
   else if (moving) p.activity = wantsJog && actualSpeed > WALK_SPEED * 0.8 ? 'jog' : 'walk';
   else p.activity = 'idle';
 
@@ -377,8 +435,32 @@ export function stepPlayer(p: PlayerState, l: Loadout, intent: MoveIntent, dt: n
       emit({ type: 'checkpoint', id: cp.id, name: cp.name });
     }
   }
+  // ---- gemstones
+  for (const g of W.gems) {
+    if (p.gems[g.id]) continue;
+    const dx = p.x - g.x;
+    const dz = p.z - g.z;
+    if (dx * dx + dz * dz < GEM_RADIUS * GEM_RADIUS && Math.abs(p.y + p.jumpH + 1 - g.y) < 2.5) {
+      p.gems[g.id] = true;
+      p.gemCounts[g.kind]++;
+      if (g.kind === 'green') p.stamina = Math.min(p.maxStamina, p.stamina + p.maxStamina * GREEN_GEM_FRACTION);
+      else p.boostUntil = p.realTime + SPEED_BOOST.seconds; // refreshes, never stacks
+      if (p.exhausted && p.stamina > 30) p.exhausted = false;
+      emit({ type: 'gem', kind: g.kind, x: g.x, y: g.y, z: g.z });
+    }
+  }
   p.nearWater = Math.hypot(p.x - LAKE.x, p.z - LAKE.z) < LAKE.r + 7;
   p.remaining = remainingToSummit(p.x, p.z);
+  p.maxProgress = Math.max(p.maxProgress, W.main.length - p.remaining);
+}
+
+export function jump(p: PlayerState): boolean {
+  if (p.jumpH > 0 || p.vy > 0 || p.resting || p.summited || p.landT > 0.1) return false;
+  if (p.stamina < 4) return false;
+  p.vy = JUMP_VELOCITY * (p.surface === 'snow' ? 0.75 : 1);
+  p.jumpH = 0.001;
+  p.stamina -= 3;
+  return true;
 }
 
 export function nearSummit(p: PlayerState) {
@@ -390,10 +472,13 @@ export type ActionResult = { ok: boolean; text: string };
 
 export function eat(p: PlayerState): ActionResult {
   if (p.food <= 0) return { ok: false, text: 'No food left in your pack.' };
+  if (p.maxStamina > 97) return { ok: false, text: 'Energy is full — save the bar for later.' };
   p.food -= 1;
-  p.maxStamina = Math.min(100, p.maxStamina + 28);
-  p.stamina = Math.min(p.maxStamina, p.stamina + 22);
-  return { ok: true, text: 'Ate a trail bar  +energy' };
+  p.foodUsed += 1;
+  const before = p.maxStamina;
+  p.maxStamina = Math.min(100, p.maxStamina + 30);
+  p.stamina = Math.min(p.maxStamina, p.stamina + 15);
+  return { ok: true, text: `Trail bar: energy +${Math.round(p.maxStamina - before)}` };
 }
 
 export function drink(p: PlayerState): ActionResult {
@@ -401,6 +486,7 @@ export function drink(p: PlayerState): ActionResult {
   if (p.hydration > 97) return { ok: false, text: 'You are not thirsty.' };
   const amt = Math.min(WATER_PER_DRINK, p.water);
   p.water = Math.max(0, p.water - amt);
+  p.waterUsed += amt;
   p.hydration = Math.min(100, p.hydration + 34 * (amt / WATER_PER_DRINK));
   p.stamina = Math.min(p.maxStamina, p.stamina + 6);
   return { ok: true, text: `Drank ${amt.toFixed(1)} L  +hydration` };
@@ -416,7 +502,7 @@ export function refill(p: PlayerState, l: Loadout): ActionResult {
 export function toggleRest(p: PlayerState): ActionResult {
   if (p.speed > 0.6) return { ok: false, text: 'Stop moving to rest.' };
   p.resting = !p.resting;
-  return { ok: true, text: p.resting ? 'Resting… (move to continue)' : 'Back on your feet.' };
+  return { ok: true, text: p.resting ? 'Resting — the clock runs faster. Move to continue.' : 'Back on your feet.' };
 }
 
 export function rating(p: PlayerState, l: Loadout) {
@@ -424,8 +510,8 @@ export function rating(p: PlayerState, l: Loadout) {
   const trailPct = p.timeMoving > 0 ? p.timeOnTrail / p.timeMoving : 1;
   const finish = clockHour(p, l);
   let title = 'Hard-won Summit';
-  if (hours < 5.2 && trailPct > 0.7) title = 'Alpine Ace';
-  else if (hours < 6.5) title = 'Steady Mountaineer';
+  if (hours < 4.6 && trailPct > 0.7) title = 'Alpine Ace';
+  else if (hours < 5.8) title = 'Steady Mountaineer';
   if (finish > 15) title = 'Afternoon Summiter';
   return { title, hours, trailPct, finish };
 }

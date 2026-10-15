@@ -1,6 +1,10 @@
 import { BASE_PACK_KG, GEAR, packWeight, type Loadout } from '../game/sim';
 import { useGame } from '../game/store';
 import { ROUTE_MILES, SUMMIT_FT, TRAILHEAD_FT } from '../game/world';
+import { ACTIVE_MOUNTAIN, ACTIVE_ROUTE } from '../game/routes';
+import { loadRecords, personalBests } from '../game/records';
+import { fmtReal } from './ExpeditionLog';
+import { useMemo } from 'react';
 import { fmtInt } from './format';
 import { RouteProfile } from './RouteProfile';
 
@@ -36,6 +40,9 @@ export function PrepScreen() {
   const loadout = useGame((s) => s.loadout);
   const setLoadout = useGame((s) => s.setLoadout);
   const start = useGame((s) => s.start);
+  const setLogOpen = useGame((s) => s.setLogOpen);
+  const logOpen = useGame((s) => s.logOpen);
+  const pb = useMemo(() => personalBests(loadRecords(), ACTIVE_MOUNTAIN.id, ACTIVE_ROUTE.id, ACTIVE_ROUTE.miles), [logOpen]);
   const kg = packWeight(loadout);
   const pc = packClass(kg);
   const speedPenalty = Math.max(0, kg - 9) * 1.2;
@@ -46,7 +53,7 @@ export function PrepScreen() {
       <div className="prep-panel">
         <header className="prep-head">
           <div className="brand">SUMMIT LINE</div>
-          <h1>Cindercrest</h1>
+          <h1>{ACTIVE_MOUNTAIN.name}</h1>
           <p className="sub">Cascade Range volcano · {fmtInt(SUMMIT_FT)} ft</p>
           <p className="blurb">
             A broad cinder cone with a snow-filled summit crater. The Climbers Trail winds through old-growth hemlock, past an alpine tarn,
@@ -69,8 +76,10 @@ export function PrepScreen() {
               <span className="v">{fmtInt(TRAILHEAD_FT)} ft</span>
             </div>
             <div>
-              <span className="k">Est. time</span>
-              <span className="v">4–6 h</span>
+              <span className="k">Play time</span>
+              <span className="v">
+                {ACTIVE_ROUTE.estMinutes[0]}–{ACTIVE_ROUTE.estMinutes[1]} min
+              </span>
             </div>
           </div>
           <RouteProfile width={372} height={92} labels />
@@ -152,12 +161,19 @@ export function PrepScreen() {
           </div>
         </section>
 
+        <button type="button" className="log-btn" onClick={() => setLogOpen(true)}>
+          <span>
+            <b>Expedition log</b>
+            <small>{pb.climbs ? `${pb.climbs} summit${pb.climbs > 1 ? 's' : ''} · best ${fmtReal(pb.fastestReal!.realSeconds)}` : 'No summits yet'}</small>
+          </span>
+          <span aria-hidden="true">›</span>
+        </button>
         <button type="button" className="start-btn" onClick={start}>
           Start expedition
           <span>→</span>
         </button>
         <p className="controls-hint">
-          WASD move · Shift jog · Drag camera · Scroll zoom · Space interact · E eat · Q drink · R rest · Esc pause
+          WASD move · Shift jog · Space jump/act · Drag look · Scroll zoom · M map · E eat · Q drink · R rest · Esc pause
         </p>
       </div>
     </div>

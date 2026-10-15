@@ -24,17 +24,22 @@ export function useDesktopControls(canvasHost: React.RefObject<HTMLElement | nul
       const g = useGame.getState();
       const target = e.target as HTMLElement | null;
       if (g.phase !== 'playing' && target && (target.tagName === 'INPUT' || target.tagName === 'BUTTON') && e.code === 'Space') return;
-      if (e.code === 'Escape' || e.code === 'KeyP') {
+      if ((e.code === 'Escape' || e.code === 'KeyP') && !g.mapOpen) {
         if (g.phase === 'playing') g.pause();
         else if (g.phase === 'paused') g.resume();
         e.preventDefault();
         return;
       }
-      if (e.code === 'KeyM') {
+      if (e.code === 'KeyM' && g.phase === 'playing') {
+        if (!g.mapOpen) g.setMapOpen(true);
+        return;
+      }
+      if (e.code === 'KeyN') {
         setMuted(!isMuted());
         g.toast(isMuted() ? 'Sound off' : 'Sound on');
         return;
       }
+      if (g.mapOpen) return;
       if (g.phase !== 'playing') return;
       if (GAME_KEYS.has(e.code)) e.preventDefault();
       if (e.repeat) return;

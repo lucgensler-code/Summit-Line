@@ -8,6 +8,7 @@ import {
   daylight,
   drink,
   eat,
+  jump,
   nearSummit,
   packWeight,
   refill,
@@ -16,7 +17,9 @@ import {
   toggleRest,
   type GameEvent,
   type PlayerState,
+  SPEED_BOOST,
 } from '../game/sim';
+import { CAM_MAX, CAM_MIN } from '../game/store';
 import { runtime, useGame, type HudSnapshot } from '../game/store';
 import { SURFACE_LABEL, elevationFt, getWorld, unitsToMiles } from '../game/world';
 
@@ -86,18 +89,24 @@ export function GameLoop() {
     const cam = runtime.cam;
 
     // Camera input (applies while playing / paused).
-    if (g.phase === 'playing' || g.phase === 'paused') {
+    if (g.phase === 'playing' || g.phase === 'paused' || g.phase === 'summit') {
+      const touched = input.lookDX !== 0 || input.lookDY !== 0 || input.zoom !== 0 || input.zoomMul !== 1;
       cam.yaw -= input.lookDX * 0.0055;
       cam.pitch = Math.min(1.25, Math.max(-0.2, cam.pitch + input.lookDY * 0.004));
-      cam.dist = Math.min(22, Math.max(3.2, cam.dist * (1 + input.zoom * 0.12)));
+      cam.dist = Math.min(CAM_MAX, Math.max(CAM_MIN, (cam.dist * (1 + input.zoom * 0.12)) / input.zoomMul));
+      if (touched && !runtime.cameraUsed) {
+        runtime.cameraUsed = true;
+        g.dismissHint();
+      }
     }
     input.lookDX = input.lookDY = input.zoom = 0;
+    input.zoomMul = 1;
 
     if (p) {
       const W = getWorld();
       updateWind((p.y - W.hTrailhead) / (W.hSummit - W.hTrailhead), performance.now() / 1000, g.phase === 'playing' || g.phase === 'summit');
     }
-    if (!p || g.phase !== 'playing') {
+    if (!p || g.phase !== 'playing' || g.mapOpen) {
       input.queue.length = 0;
       return;
     }
@@ -111,8 +120,10 @@ export function GameLoop() {
     while (input.queue.length) {
       const a = input.queue.shift()!;
       if (a === 'interact') {
+        // One button: contextual Action near something interactive, otherwise Jump.
         if (interaction) interaction.run();
         else if (g.reading) g.setReading(null);
+        else jump(p);
       } else if (a === 'eat') {
         const r = eat(p);
         g.toast(r.text, r.ok ? 'good' : 'warn');
@@ -144,6 +155,10 @@ export function GameLoop() {
         g.toast(msg[e.id] ?? `Checkpoint: ${e.name}`, 'good');
       } else if (e.type === 'exhausted') {
         g.toast('Exhausted! Slow down, rest (R) or eat (E) to recover.', 'warn');
+      } else if (e.type === 'gem') {
+        runtime.fx.push({ kind: e.kind, x: e.x, y: e.y, z: e.z, t0: performance.now() / 1000 });
+        g.flashGem(e.kind);
+        g.toast(e.kind === 'green' ? '+35% Stamina' : `Speed Boost! ${SPEED_BOOST.seconds}s`, 'good');
       } else g.toast(e.text, e.tone);
     };
     stepPlayer(p, l, { x: ix, z: iz, jog }, dt, emit);
@@ -203,6 +218,11 @@ export function GameLoop() {
         snowSoft: snowSoftness(hour),
         daylight: daylight(hour),
         checkpoints: Object.keys(p.checkpoints),
+        boostLeft: Math.max(0, p.boostUntil - p.realTime),
+        limiter: p.limiter,
+        gemCount: p.gemCounts.green + p.gemCounts.red,
+        gemTotal: W.gems.length,
+        canAct: !!interaction,
       };
       g.setHud(hud);
       // Close sign text when walking away.

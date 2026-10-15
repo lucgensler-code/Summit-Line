@@ -6,7 +6,9 @@ import { HUD } from './ui/HUD';
 import { PauseMenu } from './ui/PauseMenu';
 import { PrepScreen } from './ui/PrepScreen';
 import { SummitScreen } from './ui/SummitScreen';
-import { TouchControls } from './ui/TouchControls';
+import { TouchControls, isTouchDevice } from './ui/TouchControls';
+import { MapOverlay } from './ui/MapOverlay';
+import { ExpeditionLog } from './ui/ExpeditionLog';
 import { getWorld } from './game/world';
 
 declare global {
@@ -18,6 +20,9 @@ declare global {
 export function App() {
   const host = useRef<HTMLDivElement>(null);
   const phase = useGame((s) => s.phase);
+  const mapOpen = useGame((s) => s.mapOpen);
+  const logOpen = useGame((s) => s.logOpen);
+  const viewMode = useGame((s) => s.viewMode);
   useDesktopControls(host);
 
   useEffect(() => {
@@ -27,17 +32,34 @@ export function App() {
       if (document.hidden) useGame.getState().pause();
     };
     document.addEventListener('visibilitychange', onVis);
-    return () => document.removeEventListener('visibilitychange', onVis);
+    // Stop iOS Safari's own pinch-zoom / page scrolling from fighting the game's gestures.
+    const block = (e: Event) => e.preventDefault();
+    const blockTouch = (e: TouchEvent) => {
+      if (e.touches.length > 1) return e.preventDefault();
+      const scrollable = (e.target as Element | null)?.closest?.('.modal, .summary-card, .prep-panel, .map-sheet');
+      if (!scrollable && useGame.getState().phase !== 'prep') e.preventDefault();
+    };
+    document.addEventListener('gesturestart', block);
+    document.addEventListener('gesturechange', block);
+    document.addEventListener('touchmove', blockTouch, { passive: false });
+    return () => {
+      document.removeEventListener('visibilitychange', onVis);
+      document.removeEventListener('gesturestart', block);
+      document.removeEventListener('gesturechange', block);
+      document.removeEventListener('touchmove', blockTouch);
+    };
   }, []);
 
   return (
-    <div className={`app phase-${phase}`}>
+    <div className={`app phase-${phase} ${isTouchDevice() ? 'is-touch' : 'is-desktop'} ${viewMode ? 'view-mode' : ''}`}>
       <div className="canvas-host" ref={host}>
         <GameCanvas />
       </div>
       {phase === 'prep' && <PrepScreen />}
+      {phase === 'playing' && !mapOpen && <TouchControls />}
       {(phase === 'playing' || phase === 'paused') && <HUD />}
-      {phase === 'playing' && <TouchControls />}
+      {mapOpen && (phase === 'playing' || phase === 'paused') && <MapOverlay />}
+      {logOpen && <ExpeditionLog />}
       {phase === 'paused' && <PauseMenu />}
       {phase === 'summit' && <SummitScreen />}
     </div>

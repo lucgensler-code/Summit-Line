@@ -4,7 +4,8 @@ import * as THREE from 'three';
 import { footstep } from '../game/audio';
 import { clamp, lerp } from '../game/noise';
 import { clockHour, daylight } from '../game/sim';
-import { runtime, useGame } from '../game/store';
+import { summitCinematic } from '../game/cinematic';
+import { CAM_DEFAULT, CAM_MIN, runtime, useGame } from '../game/store';
 import { heightAt } from '../game/world';
 
 const COLORS = {
@@ -54,7 +55,7 @@ export function Player() {
   const poleR = useRef<THREE.Group>(null);
   const lamp = useRef<THREE.SpotLight>(null);
   const lampTarget = useMemo(() => new THREE.Object3D(), []);
-  const gait = useRef({ phase: 0, blendJog: 0, rest: 0, tired: 0, summit: 0, lean: 0 });
+  const gait = useRef({ phase: 0, blendJog: 0, rest: 0, tired: 0, summit: 0, lean: 0, air: 0 });
   const loadout = useGame((s) => s.loadout);
   const phase = useGame((s) => s.phase);
 
@@ -65,7 +66,7 @@ export function Player() {
     if (!r) return;
     r.visible = !!p && phase !== 'prep';
     if (!p) return;
-    r.position.set(p.x, p.y, p.z);
+    r.position.set(p.x, p.y + p.jumpH, p.z);
     r.rotation.y = p.heading;
 
     const g = gait.current;
@@ -78,6 +79,7 @@ export function Player() {
     g.rest = lerp(g.rest, p.activity === 'rest' ? 1 : 0, k(4));
     g.tired = lerp(g.tired, p.activity === 'exhausted' ? 1 : 0, k(4));
     g.summit = lerp(g.summit, p.summited ? 1 : 0, k(3));
+    g.air = lerp(g.air, p.jumpH > 0.05 ? 1 : 0, k(14));
     g.lean = lerp(g.lean, clamp(p.grade, -0.5, 0.8) * (moving ? 1 : 0), k(4));
     const stride = lerp(2.3, 1.55, g.blendJog); // radians per unit travelled
     const prevStep = Math.floor(g.phase / Math.PI);
@@ -95,10 +97,11 @@ export function Player() {
     const set = (j: Joint, x: number) => {
       if (j) j.rotation.x = lerp(j.rotation.x, x, k(18));
     };
-    set(thighL.current, s * amp + restThigh - g.tired * 0.35 - Math.max(g.lean, 0) * 0.3);
-    set(thighR.current, -s * amp + restThigh - g.tired * 0.35 - Math.max(g.lean, 0) * 0.3);
-    set(shinL.current, Math.max(0, -c) * amp * 1.3 + 0.05 + g.rest * 1.45 + g.tired * 0.5);
-    set(shinR.current, Math.max(0, c) * amp * 1.3 + 0.05 + g.rest * 1.45 + g.tired * 0.5);
+    const tuck = g.air * -0.7;
+    set(thighL.current, s * amp * (1 - g.air) + tuck + restThigh - g.tired * 0.35 - Math.max(g.lean, 0) * 0.3);
+    set(thighR.current, -s * amp * (1 - g.air) + tuck * 0.6 + restThigh - g.tired * 0.35 - Math.max(g.lean, 0) * 0.3);
+    set(shinL.current, Math.max(0, -c) * amp * 1.3 * (1 - g.air) + g.air * 1.1 + 0.05 + g.rest * 1.45 + g.tired * 0.5);
+    set(shinR.current, Math.max(0, c) * amp * 1.3 * (1 - g.air) + g.air * 0.8 + 0.05 + g.rest * 1.45 + g.tired * 0.5);
 
     // Arms (poles plant opposite to legs); summit = arms raised
     const armSwing = amp * (loadout.poles ? 0.75 : 0.9);
@@ -268,6 +271,7 @@ export function CameraRig() {
   const { camera } = useThree();
   const look = useRef(new THREE.Vector3());
   const initialised = useRef(-1);
+  const dist = useRef(CAM_DEFAULT);
   useFrame(({ clock }, rawDt) => {
     const dt = Math.min(rawDt, 0.1);
     const g = useGame.getState();
@@ -286,38 +290,50 @@ export function CameraRig() {
       return;
     }
 
+    const cam = runtime.cam;
+    // Smooth zoom toward the pinch / scroll target.
+    dist.current = lerp(dist.current, cam.dist, 1 - Math.exp(-dt * 8));
+    const d = dist.current;
+
     if (g.phase === 'summit' && p.summited) {
-      const since = performance.now() / 1000 - runtime.summitAt;
-      const e = Math.min(since / 9, 1);
-      const ease = e * e * (3 - 2 * e);
-      const a = runtime.cam.yaw + since * 0.12;
-      const dist = lerp(8, 70, ease);
-      const height = lerp(2.5, 30, ease);
-      tmpPos.set(p.x + Math.sin(a) * dist, p.y + height, p.z + Math.cos(a) * dist);
+      // Celebration: pull back and orbit 360° while the day cycles. Drag / pinch still steer it.
+      const c = summitCinematic();
+      const zoom = clamp(d / CAM_DEFAULT, 0.4, 3);
+      const a = cam.yaw + c.orbit;
+      const r = lerp(7, 58, c.reveal) * zoom;
+      const h = (lerp(2.2, 22, c.reveal) + Math.sin(cam.pitch) * 18) * zoom;
+      tmpPos.set(p.x + Math.sin(a) * r, p.y + h, p.z + Math.cos(a) * r);
       const ground = heightAt(tmpPos.x, tmpPos.z) + 2;
       if (tmpPos.y < ground) tmpPos.y = ground;
-      camera.position.lerp(tmpPos, 1 - Math.exp(-dt * 2));
-      tmpTarget.set(p.x, p.y + lerp(1.4, 0, ease), p.z);
+      camera.position.lerp(tmpPos, 1 - Math.exp(-dt * 2.5));
+      tmpTarget.set(p.x, p.y + lerp(1.4, 0.5, c.reveal), p.z);
       look.current.lerp(tmpTarget, 1 - Math.exp(-dt * 3));
       camera.lookAt(look.current);
       return;
     }
 
-    const cam = runtime.cam;
+    // Close in → eye height over the shoulder; far out → look at the climber's feet area.
+    const near = clamp((CAM_DEFAULT - d) / (CAM_DEFAULT - CAM_MIN), 0, 1);
+    const eye = p.y + p.jumpH + lerp(1.5, 1.72, near);
     const cp = Math.cos(cam.pitch);
-    tmpTarget.set(p.x, p.y + 1.5, p.z);
-    tmpPos.set(p.x + Math.sin(cam.yaw) * cp * cam.dist, p.y + 1.5 + Math.sin(cam.pitch) * cam.dist, p.z + Math.cos(cam.yaw) * cp * cam.dist);
+    // Small sideways offset when close so the climber doesn't fill the screen.
+    const side = near * 0.55;
+    const sx = Math.cos(cam.yaw) * side;
+    const sz = -Math.sin(cam.yaw) * side;
+    tmpTarget.set(p.x + sx, eye, p.z + sz);
+    tmpPos.set(p.x + sx + Math.sin(cam.yaw) * cp * d, eye + Math.sin(cam.pitch) * d, p.z + sz + Math.cos(cam.yaw) * cp * d);
     // Keep the camera above the terrain along the view ray.
-    for (let i = 1; i <= 4; i++) {
-      const f = i / 4;
+    for (let i = 1; i <= 5; i++) {
+      const f = i / 5;
       const x = lerp(tmpTarget.x, tmpPos.x, f);
       const z = lerp(tmpTarget.z, tmpPos.z, f);
       const y = lerp(tmpTarget.y, tmpPos.y, f);
-      const minY = heightAt(x, z) + 0.6;
+      const minY = heightAt(x, z) + 0.5;
       if (y < minY) tmpPos.y += (minY - y) / f;
     }
-    if (initialised.current !== runtime.runId || camera.position.distanceTo(tmpPos) > 60) {
+    if (initialised.current !== runtime.runId || camera.position.distanceTo(tmpPos) > 80) {
       initialised.current = runtime.runId;
+      dist.current = cam.dist;
       camera.position.copy(tmpPos);
       look.current.copy(tmpTarget);
     }

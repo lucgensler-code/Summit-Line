@@ -16,19 +16,19 @@ import {
 
 const C = (hex: string) => new THREE.Color(hex);
 const PAL = {
-  duff: C('#62573c'),
-  moss: C('#3d5229'),
-  forest: C('#56623a'),
-  meadowDry: C('#8e8752'),
-  meadowGreen: C('#64773a'),
-  cinder: C('#7c4734'),
-  cinderDark: C('#4f3832'),
-  pumice: C('#958a7f'),
-  basalt: C('#3f3a38'),
-  snow: C('#eef3f8'),
-  snowShade: C('#cdd9e6'),
-  plain: C('#3d4a2b'),
-  shore: C('#6b6152'),
+  duff: C('#6a5a36'),
+  moss: C('#3f6a2a'),
+  forest: C('#4f6e33'),
+  meadowDry: C('#a59a52'),
+  meadowGreen: C('#6c8c38'),
+  cinder: C('#93492f'),
+  cinderDark: C('#5c362c'),
+  pumice: C('#a89582'),
+  basalt: C('#433a3a'),
+  snow: C('#f4f8fc'),
+  snowShade: C('#c4d6ec'),
+  plain: C('#3e5629'),
+  shore: C('#74674f'),
 };
 
 const tmp = new THREE.Color();
@@ -128,10 +128,10 @@ export function Terrain() {
 // ---------------------------------------------------------------------------------------------
 
 const TRAIL_COLORS = {
-  dirt: C('#9a7a55'),
-  dirtDark: C('#7a5f43'),
-  scree: C('#8d7b6c'),
-  snow: C('#d7e0e8'),
+  dirt: C('#a7804f'),
+  dirtDark: C('#83603c'),
+  scree: C('#9a806a'),
+  snow: C('#d2deea'),
 };
 
 function ribbonGeometry(line: TrailLine, halfW: number) {

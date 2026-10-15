@@ -15,7 +15,7 @@ import {
   type Loadout,
 } from '../src/game/sim';
 
-type Strategy = 'trail' | 'direct';
+type Strategy = 'trail' | 'direct' | 'gems';
 
 function run(name: string, strategy: Strategy, loadout: Loadout, jog = false) {
   const W = getWorld();
@@ -23,6 +23,7 @@ function run(name: string, strategy: Strategy, loadout: Loadout, jog = false) {
   const events: string[] = [];
   const emit = (e: GameEvent) => {
     if (e.type === 'checkpoint') events.push(`${e.name}@${(p.realTime / 60).toFixed(1)}m`);
+    if (e.type === 'gem') events.push(`${e.kind} gem@${(p.realTime / 60).toFixed(1)}m`);
     if (e.type === 'exhausted') events.push(`EXHAUSTED@${(p.realTime / 60).toFixed(1)}m`);
   };
   const dt = 1 / 30;
@@ -47,7 +48,16 @@ function run(name: string, strategy: Strategy, loadout: Loadout, jog = false) {
     }
     let tx: number;
     let tz: number;
-    if (strategy === 'trail') {
+    const gem = strategy === 'gems' ? W.gems.find((g) => !p.gems[g.id] && Math.hypot(g.x - p.x, g.z - p.z) < 130) : undefined;
+    if (gem) {
+      tx = gem.x;
+      tz = gem.z;
+      // resume the trail from the nearest point after detouring
+      let best = idx;
+      for (let k = idx; k < Math.min(idx + 120, W.main.pts.length); k++)
+        if (Math.hypot(W.main.pts[k].x - gem.x, W.main.pts[k].z - gem.z) < Math.hypot(W.main.pts[best].x - gem.x, W.main.pts[best].z - gem.z)) best = k;
+      idx = Math.max(idx, best);
+    } else if (strategy === 'trail' || strategy === 'gems') {
       const pts = W.main.pts;
       while (idx < pts.length - 1 && Math.hypot(pts[idx].x - p.x, pts[idx].z - p.z) < 3.5) idx++;
       tx = pts[idx].x;
@@ -84,7 +94,7 @@ function run(name: string, strategy: Strategy, loadout: Loadout, jog = false) {
       `game ${(p.gameTime / 3600).toFixed(2)} h  dist ${unitsToMiles(p.distance).toFixed(2)} mi  ` +
       `elev ${elevationFt(p.y).toFixed(0)} ft  stam ${p.stamina.toFixed(0)}/${p.maxStamina.toFixed(0)}  ` +
       `hyd ${p.hydration.toFixed(0)}  water ${p.water.toFixed(1)}  food ${p.food}  ` +
-      `onTrail ${((p.timeOnTrail / Math.max(p.timeMoving, 1)) * 100).toFixed(0)}%`,
+      `onTrail ${((p.timeOnTrail / Math.max(p.timeMoving, 1)) * 100).toFixed(0)}%  gems ${p.gemCounts.green}g/${p.gemCounts.red}r`,
   );
   console.log('   ', events.join(', '));
   return ok;
@@ -99,6 +109,7 @@ const results = [
   run('trail, heavy pack late', 'trail', { ...DEFAULT_LOADOUT, waterL: 4, food: 8, departureHour: 10 }),
   run('trail, no spikes/poles', 'trail', { ...DEFAULT_LOADOUT, poles: false, spikes: false }),
   run('direct off-trail', 'direct', DEFAULT_LOADOUT),
+  run('trail + gem hunting', 'gems', DEFAULT_LOADOUT, true),
 ];
 if (!results[0]) {
   console.error('Default trail ascent failed to reach the summit');

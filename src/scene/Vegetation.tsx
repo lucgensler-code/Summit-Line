@@ -98,38 +98,49 @@ function Chunked({ items, geometry, material, place, cast = false, receive = fal
 
 export function Trees() {
   const W = getWorld();
-  const { foliage, trunk } = useMemo(() => {
+  // Two species: layered fir (most of the forest) and a slender spire spruce.
+  const { fir, spruce, trunk, firs, spruces } = useMemo(() => {
     const c1 = new THREE.ConeGeometry(2.3, 4.4, 7, 1).translate(0, 3.6, 0);
     const c2 = new THREE.ConeGeometry(1.8, 3.8, 7, 1).translate(0, 5.6, 0);
     const c3 = new THREE.ConeGeometry(1.15, 3.2, 7, 1).translate(0, 7.6, 0);
-    const foliage = merge([c1, c2, c3].map((g) => tint(g, '#ffffff')));
+    const fir = merge([c1, c2, c3].map((g) => tint(g, '#ffffff')));
+    const s1 = new THREE.ConeGeometry(1.5, 6.5, 6, 1).translate(0, 4.6, 0);
+    const s2 = new THREE.ConeGeometry(1.0, 4.2, 6, 1).translate(0, 8.4, 0);
+    const spruce = merge([s1, s2].map((g) => tint(g, '#ffffff')));
     const trunk = new THREE.CylinderGeometry(0.16, 0.26, 2.4, 5).translate(0, 1.2, 0);
-    return { foliage, trunk };
-  }, []);
-  const greens = useMemo(() => [new THREE.Color('#2e4a2c'), new THREE.Color('#3b5a33'), new THREE.Color('#284034'), new THREE.Color('#47603a')], []);
+    const firs = W.trees.filter((t) => t.tint < 0.68 || t.y > TREELINE_H - 5);
+    const spruces = W.trees.filter((t) => !(t.tint < 0.68 || t.y > TREELINE_H - 5));
+    return { fir, spruce, trunk, firs, spruces };
+  }, [W]);
+  const greens = useMemo(
+    () => [new THREE.Color('#2c5530'), new THREE.Color('#3c6a32'), new THREE.Color('#24473a'), new THREE.Color('#4c7238'), new THREE.Color('#335c2a')],
+    [],
+  );
+  const frost = useMemo(() => new THREE.Color('#b9c8c4'), []);
   const place = useMemo(
     () => (it: Scatter) => {
       const alpine = it.y > TREELINE_H - 5;
-      const g = greens[Math.floor(it.tint * greens.length) % greens.length];
-      col.copy(g).multiplyScalar(alpine ? 0.85 : 1);
+      const g = greens[Math.floor(it.tint * 997) % greens.length];
+      col.copy(g).multiplyScalar(alpine ? 0.88 : 0.92 + ((it.tint * 7.3) % 1) * 0.2);
       // Dusting of snow on high trees
-      if (it.y > 150) col.lerp(new THREE.Color('#a9b7b3'), 0.25);
+      if (it.y > 150) col.lerp(frost, 0.28);
       const s = it.s;
       return { sx: s * (0.9 + it.tint * 0.2), sy: s * (alpine ? 0.8 : 1.0 + it.tint * 0.35), sz: s * (0.9 + it.tint * 0.2), color: col };
     },
-    [greens],
+    [greens, frost],
   );
   const placeTrunk = useMemo(() => (it: Scatter) => ({ sx: it.s, sy: it.s, sz: it.s }), []);
   const mats = useMemo(
     () => ({
-      foliage: new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.9 }),
-      trunk: new THREE.MeshStandardMaterial({ color: '#4a3426', roughness: 1 }),
+      foliage: new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.88 }),
+      trunk: new THREE.MeshStandardMaterial({ color: '#553826', roughness: 1 }),
     }),
     [],
   );
   return (
     <group>
-      <Chunked items={W.trees} geometry={foliage} material={mats.foliage} place={place} cast receive />
+      <Chunked items={firs} geometry={fir} material={mats.foliage} place={place} cast receive />
+      <Chunked items={spruces} geometry={spruce} material={mats.foliage} place={place} cast receive />
       <Chunked items={W.trees} geometry={trunk} material={mats.trunk} place={placeTrunk} cast />
     </group>
   );
@@ -137,14 +148,16 @@ export function Trees() {
 
 export function Rocks() {
   const W = getWorld();
-  const geo = useMemo(() => jitter(new THREE.IcosahedronGeometry(1, 0), 0.45, 7), []);
-  const mat = useMemo(() => new THREE.MeshStandardMaterial({ flatShading: true, roughness: 0.95 }), []);
+  const geoA = useMemo(() => jitter(new THREE.IcosahedronGeometry(1, 0), 0.45, 7), []);
+  const geoB = useMemo(() => jitter(new THREE.DodecahedronGeometry(1, 0), 0.55, 19), []);
+  const [rocksA, rocksB] = useMemo(() => [W.rocks.filter((r) => r.tint < 0.55), W.rocks.filter((r) => r.tint >= 0.55)], [W]);
+  const mat = useMemo(() => new THREE.MeshStandardMaterial({ flatShading: true, roughness: 0.92 }), []);
   const palette = useMemo(
     () => ({
-      gray: new THREE.Color('#6b6560'),
-      dark: new THREE.Color('#3e3735'),
-      red: new THREE.Color('#7b4a3b'),
-      lichen: new THREE.Color('#7f7c62'),
+      gray: new THREE.Color('#77706a'),
+      dark: new THREE.Color('#433a37'),
+      red: new THREE.Color('#8c4632'),
+      lichen: new THREE.Color('#8a8a5e'),
       snow: new THREE.Color('#e9eef3'),
     }),
     [],
@@ -167,14 +180,19 @@ export function Rocks() {
     },
     [palette],
   );
-  return <Chunked items={W.rocks} geometry={geo} material={mat} place={place} cast receive />;
+  return (
+    <group>
+      <Chunked items={rocksA} geometry={geoA} material={mat} place={place} cast receive />
+      <Chunked items={rocksB} geometry={geoB} material={mat} place={place} cast receive />
+    </group>
+  );
 }
 
 export function Shrubs() {
   const W = getWorld();
   const geo = useMemo(() => jitter(new THREE.DodecahedronGeometry(0.9, 0).translate(0, 0.35, 0), 0.3, 3), []);
   const mat = useMemo(() => new THREE.MeshStandardMaterial({ flatShading: true, roughness: 1 }), []);
-  const cols = useMemo(() => [new THREE.Color('#556b2f'), new THREE.Color('#6d7a3a'), new THREE.Color('#7d6a3a'), new THREE.Color('#41592e')], []);
+  const cols = useMemo(() => [new THREE.Color('#5a7a2c'), new THREE.Color('#7a8a36'), new THREE.Color('#8c6d38'), new THREE.Color('#3f6430'), new THREE.Color('#9a5a6a')], []);
   const place = useMemo(
     () => (it: Scatter) => {
       col.copy(cols[Math.floor(it.tint * cols.length) % cols.length]);

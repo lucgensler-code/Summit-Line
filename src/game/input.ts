@@ -10,6 +10,8 @@ export const input = {
   lookDX: 0,
   lookDY: 0,
   zoom: 0,
+  /** pinch gesture: multiply camera distance by 1/zoomMul this frame */
+  zoomMul: 1,
   queue: [] as QueuedAction[],
 };
 
@@ -44,5 +46,6 @@ export function clearInput() {
   input.stick.active = false;
   input.touchJog = false;
   input.lookDX = input.lookDY = input.zoom = 0;
+  input.zoomMul = 1;
   input.queue.length = 0;
 }

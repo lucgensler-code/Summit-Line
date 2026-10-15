@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { fbm, mulberry32, smoothstep } from '../game/noise';
 import { clockHour, daylight } from '../game/sim';
+import { summitCinematic } from '../game/cinematic';
 import { runtime, useGame } from '../game/store';
 import { elevationFt } from '../game/world';
 import { merge, tint } from './Vegetation';
@@ -23,40 +24,54 @@ interface Key {
 }
 
 const KEYS: Key[] = [
-  { h: 3.5, top: '#070d1e', horizon: '#1d2840', sun: '#7d8fc4', sunI: 0.35, hemiSky: '#43507a', hemiGround: '#151820', hemiI: 0.85, fog: 0.75 },
-  { h: 5.0, top: '#101c3c', horizon: '#4a4a66', sun: '#8a95c8', sunI: 0.4, hemiSky: '#56628c', hemiGround: '#1d1d24', hemiI: 0.93, fog: 0.8 },
-  { h: 5.9, top: '#23366a', horizon: '#d98a62', sun: '#ff9466', sunI: 0.9, hemiSky: '#8c8fb0', hemiGround: '#3a2e2a', hemiI: 1.01, fog: 0.85 },
-  { h: 6.8, top: '#3c68a6', horizon: '#f4bf96', sun: '#ffbe85', sunI: 2.6, hemiSky: '#b4c2d8', hemiGround: '#5a4a3a', hemiI: 1.35, fog: 0.95 },
-  { h: 8.5, top: '#3d78c2', horizon: '#cfe0ec', sun: '#fff1da', sunI: 3.0, hemiSky: '#bcd2ea', hemiGround: '#5a4c3c', hemiI: 1.32, fog: 1 },
-  { h: 12, top: '#3473c4', horizon: '#d5e5f0', sun: '#ffffff', sunI: 3.0, hemiSky: '#c6dbf0', hemiGround: '#5f5141', hemiI: 1.4, fog: 1 },
-  { h: 15.5, top: '#4278ba', horizon: '#e4d8c2', sun: '#ffe6bc', sunI: 2.6, hemiSky: '#c2d0e2', hemiGround: '#5d4c3a', hemiI: 1.32, fog: 0.85 },
-  { h: 18.3, top: '#2b3f72', horizon: '#ef8d5b', sun: '#ff8a55', sunI: 1.3, hemiSky: '#9a92b0', hemiGround: '#3c2e2a', hemiI: 1.08, fog: 0.75 },
-  { h: 19.8, top: '#0d1631', horizon: '#3b3655', sun: '#7d8fc4', sunI: 0.4, hemiSky: '#4a5379', hemiGround: '#17171e', hemiI: 0.85, fog: 0.7 },
+  { h: 3.5, top: '#050b22', horizon: '#1a2546', sun: '#7d8fc4', sunI: 0.38, hemiSky: '#46558a', hemiGround: '#151820', hemiI: 0.85, fog: 0.75 },
+  { h: 5.0, top: '#0d1a46', horizon: '#57466e', sun: '#8a95c8', sunI: 0.45, hemiSky: '#5a66a0', hemiGround: '#1d1d24', hemiI: 0.95, fog: 0.8 },
+  { h: 5.9, top: '#1f3577', horizon: '#ec8a5e', sun: '#ff8a5c', sunI: 1.0, hemiSky: '#9a8fbe', hemiGround: '#40302a', hemiI: 1.0, fog: 0.85 },
+  { h: 6.8, top: '#3466b4', horizon: '#ffbc8a', sun: '#ffb877', sunI: 2.7, hemiSky: '#b6c4e2', hemiGround: '#5e4a36', hemiI: 1.35, fog: 0.95 },
+  { h: 8.5, top: '#2f74d0', horizon: '#c9e2f4', sun: '#fff0d4', sunI: 3.1, hemiSky: '#bcd6f4', hemiGround: '#5e4d38', hemiI: 1.3, fog: 1 },
+  { h: 12, top: '#246dd0', horizon: '#cfe5f6', sun: '#ffffff', sunI: 3.2, hemiSky: '#c4dcf6', hemiGround: '#62513d', hemiI: 1.35, fog: 1 },
+  { h: 15.5, top: '#3474c6', horizon: '#ecd8b8', sun: '#ffe2b0', sunI: 2.8, hemiSky: '#c6d2e8', hemiGround: '#604c36', hemiI: 1.3, fog: 0.85 },
+  { h: 18.3, top: '#253d80', horizon: '#ff8a52', sun: '#ff7a45', sunI: 1.5, hemiSky: '#a892c0', hemiGround: '#40302a', hemiI: 1.1, fog: 0.75 },
+  { h: 19.2, top: '#16225a', horizon: '#c0607a', sun: '#d06a7a', sunI: 0.7, hemiSky: '#6a62a0', hemiGround: '#221c24', hemiI: 0.95, fog: 0.72 },
+  { h: 20.2, top: '#060c26', horizon: '#2a2c56', sun: '#7d8fc4', sunI: 0.38, hemiSky: '#46558a', hemiGround: '#151820', hemiI: 0.85, fog: 0.7 },
 ];
 
 const cB = new THREE.Color();
 
+const PAL = {
+  top: new THREE.Color(),
+  horizon: new THREE.Color(),
+  sun: new THREE.Color(),
+  hemiSky: new THREE.Color(),
+  hemiGround: new THREE.Color(),
+  sunI: 0,
+  hemiI: 0,
+  fog: 1,
+};
+
+/** Interpolated sky/light palette for a clock hour (any value; wraps at 24 h). Reuses objects. */
 function samplePalette(hour: number) {
+  hour = ((hour % 24) + 24) % 24;
   let i = 0;
   while (i < KEYS.length - 2 && hour > KEYS[i + 1].h) i++;
   const a = KEYS[i];
   const b = KEYS[i + 1];
   const t = THREE.MathUtils.clamp((hour - a.h) / (b.h - a.h), 0, 1);
   const mix = (x: string, y: string, out: THREE.Color) => out.set(x).lerp(cB.set(y), t);
-  return {
-    top: mix(a.top, b.top, new THREE.Color()),
-    horizon: mix(a.horizon, b.horizon, new THREE.Color()),
-    sun: mix(a.sun, b.sun, new THREE.Color()),
-    hemiSky: mix(a.hemiSky, b.hemiSky, new THREE.Color()),
-    hemiGround: mix(a.hemiGround, b.hemiGround, new THREE.Color()),
-    sunI: THREE.MathUtils.lerp(a.sunI, b.sunI, t),
-    hemiI: THREE.MathUtils.lerp(a.hemiI, b.hemiI, t),
-    fog: THREE.MathUtils.lerp(a.fog, b.fog, t),
-  };
+  mix(a.top, b.top, PAL.top);
+  mix(a.horizon, b.horizon, PAL.horizon);
+  mix(a.sun, b.sun, PAL.sun);
+  mix(a.hemiSky, b.hemiSky, PAL.hemiSky);
+  mix(a.hemiGround, b.hemiGround, PAL.hemiGround);
+  PAL.sunI = THREE.MathUtils.lerp(a.sunI, b.sunI, t);
+  PAL.hemiI = THREE.MathUtils.lerp(a.hemiI, b.hemiI, t);
+  PAL.fog = THREE.MathUtils.lerp(a.fog, b.fog, t);
+  return PAL;
 }
 
 /** Sun direction: rises in the east, arcs through the south, sets in the west. */
 export function sunDirection(hour: number, out: THREE.Vector3) {
+  hour = ((hour % 24) + 24) % 24;
   const t = (hour - 6) / 13; // 0 sunrise .. 1 sunset
   const az = Math.PI * t; // 0 = east, π/2 = south, π = west
   const elev = Math.sin(Math.PI * t) * 1.05;
@@ -71,6 +86,7 @@ export function sunDirection(hour: number, out: THREE.Vector3) {
 export function currentHour() {
   const g = useGame.getState();
   const p = runtime.player;
+  if (p && g.phase === 'summit' && p.summited) return summitCinematic().hour;
   if (p && g.phase !== 'prep') return clockHour(p, runtime.loadout);
   const h = g.loadout.departureHour;
   return h < 6 ? 5.75 : h + 0.4;
@@ -105,19 +121,17 @@ void main() {
   // horizon haze band
   col = mix(col, uHorizon * 1.05, smoothstep(0.12, 0.0, abs(h - 0.01)) * 0.35);
   // stars
-  if (uStars > 0.01 && h > 0.05) {
-    vec3 g = floor(d * 380.0);
-    float st = step(0.9975, hash(g));
-    col += vec3(st) * uStars * smoothstep(0.05, 0.3, h);
+  if (uStars > 0.01 && h > 0.0) {
+    vec3 g = floor(d * 300.0);
+    float r = hash(g);
+    float st = step(0.996, r) * (0.6 + 0.4 * fract(r * 37.0));
+    col += vec3(st * 1.6) * uStars * smoothstep(0.0, 0.12, h);
   }
   gl_FragColor = vec4(col, 1.0);
   #include <colorspace_fragment>
 }`;
 
-function SkyDome() {
-  const mat = useMemo(
-    () =>
-      new THREE.ShaderMaterial({
+const skyMaterial = new THREE.ShaderMaterial({
         vertexShader: skyVert,
         fragmentShader: skyFrag,
         side: THREE.BackSide,
@@ -129,11 +143,12 @@ function SkyDome() {
           uSun: { value: new THREE.Color() },
           uSunDir: { value: new THREE.Vector3(0, 1, 0) },
           uSunVis: { value: 1 },
-          uStars: { value: 0 },
-        },
-      }),
-    [],
-  );
+    uStars: { value: 0 },
+  },
+});
+
+function SkyDome() {
+  const mat = skyMaterial;
   const ref = useRef<THREE.Mesh>(null);
   useFrame(({ camera }) => {
     ref.current?.position.copy(camera.position);
@@ -154,6 +169,7 @@ export function Atmosphere() {
   const target = useMemo(() => new THREE.Object3D(), []);
   const dir = useMemo(() => new THREE.Vector3(), []);
   const fog = useMemo(() => new THREE.Fog('#cfe0ec', 220, 3600), []);
+  const focus = useMemo(() => new THREE.Vector3(), []);
 
   useEffect(() => {
     scene.fog = fog;
@@ -170,7 +186,8 @@ export function Atmosphere() {
     sunDirection(hour, dir);
     const light = daylight(hour);
     const p = runtime.player;
-    const focus = p && useGame.getState().phase !== 'prep' ? new THREE.Vector3(p.x, p.y, p.z) : new THREE.Vector3(camera.position.x, 0, camera.position.z);
+    if (p && useGame.getState().phase !== 'prep') focus.set(p.x, p.y, p.z);
+    else focus.set(camera.position.x, 0, camera.position.z);
     if (sun.current) {
       const s = sun.current;
       s.color.copy(pal.sun);
@@ -178,7 +195,6 @@ export function Atmosphere() {
       s.position.copy(focus).addScaledVector(dir, 160);
       target.position.copy(focus);
       s.target = target;
-      s.shadow.camera.updateProjectionMatrix();
     }
     if (hemi.current) {
       hemi.current.color.copy(pal.hemiSky);
@@ -186,14 +202,14 @@ export function Atmosphere() {
       hemi.current.intensity = pal.hemiI;
     }
     // Fog: thin in clear morning air, thicker haze in the afternoon and at night.
-    const afternoon = smoothstep(13, 17, hour);
+    const h24 = ((hour % 24) + 24) % 24;
+    const afternoon = smoothstep(13, 17, h24) * (1 - smoothstep(18, 20, h24));
     const elevBoost = p ? smoothstep(7000, 10000, elevationFt(p.y)) : 0.4;
     fog.color.copy(pal.horizon);
     fog.near = 160 + elevBoost * 200;
     fog.far = (2300 + elevBoost * 1600) * pal.fog * (1 - afternoon * 0.35);
-    const sky = scene.getObjectByName('sky') as THREE.Mesh | undefined;
-    if (sky) {
-      const u = (sky.material as THREE.ShaderMaterial).uniforms;
+    {
+      const u = skyMaterial.uniforms;
       u.uTop.value.copy(pal.top);
       u.uHorizon.value.copy(pal.horizon);
       u.uSun.value.copy(pal.sun);

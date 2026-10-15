@@ -3,6 +3,7 @@
 // trailhead lies on the southern flank. One world unit ≈ 4.3 m when shown in the HUD.
 
 import { clamp, fbm, lerp, mulberry32, smoothstep } from './noise';
+import { ACTIVE_MOUNTAIN, ACTIVE_ROUTE, type GemKind } from './routes';
 
 export const TERRAIN_SIZE = 1760;
 export const TERRAIN_SEGMENTS = 440;
@@ -12,9 +13,9 @@ export const RIM_R = 34;
 export const TRAIL_HALF_WIDTH = 1.7;
 export const BOUNDARY_R = 835;
 
-export const TRAILHEAD_FT = 5446;
-export const SUMMIT_FT = 10212;
-export const ROUTE_MILES = 5.8;
+export const TRAILHEAD_FT = ACTIVE_MOUNTAIN.trailheadFt;
+export const SUMMIT_FT = ACTIVE_MOUNTAIN.summitFt;
+export const ROUTE_MILES = ACTIVE_ROUTE.miles;
 
 export const TREELINE_H = 120;
 
@@ -379,6 +380,15 @@ export interface World {
   cairns: Scatter[];
   posts: Scatter[];
   colliders: Map<number, { x: number; z: number; r: number }[]>;
+  gems: Gem[];
+}
+
+export interface Gem {
+  id: string;
+  kind: GemKind;
+  x: number;
+  y: number;
+  z: number;
 }
 
 let world: World | null = null;
@@ -476,6 +486,7 @@ function buildWorld(): World {
   ];
 
   scatterAll(W);
+  W.gems = placeGems(W);
   return W;
 }
 
@@ -711,4 +722,23 @@ export function remainingToSummit(x: number, z: number) {
     }
   }
   return Math.sqrt(bestD) + (main.length - main.s[best]);
+}
+
+/** Resolve the route's gem specs (trail fraction + sideways offset) into world positions. */
+function placeGems(W: World): Gem[] {
+  const main = W.main;
+  return ACTIVE_ROUTE.gems.map((g) => {
+    const target = g.at * main.length;
+    let i = 0;
+    while (i < main.pts.length - 2 && main.s[i] < target) i++;
+    const a = main.pts[Math.max(i - 1, 0)];
+    const b = main.pts[i + 1];
+    const dx = b.x - a.x;
+    const dz = b.z - a.z;
+    const l = Math.hypot(dx, dz) || 1;
+    // right-hand perpendicular of the travel direction
+    const x = main.pts[i].x - (dz / l) * g.side;
+    const z = main.pts[i].z + (dx / l) * g.side;
+    return { id: g.id, kind: g.kind, x, z, y: heightAt(x, z) + 1.3 };
+  });
 }
