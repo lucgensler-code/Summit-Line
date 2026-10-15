@@ -2121,3 +2121,11 @@ kbd {
     bottom: calc(var(--safe-b) + 90px);
   }
 }
+/* Overlays always stack above the HUD, touch layer and summit sheet. */
+.modal-backdrop,
+.map-backdrop {
+  z-index: 50;
+}
+.summary-card {
+  max-height: min(50vh, 460px);
+}

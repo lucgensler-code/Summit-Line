@@ -259,7 +259,8 @@ export const useGame = create<GameStore>((set, get) => ({
     };
     if (!cur) show(t);
     else if (priority >= 3 && cur.priority < 3) {
-      queue.unshift(cur);
+      // Critical news interrupts; an interrupted routine message is stale, so drop it.
+      if (cur.priority >= 2) queue.unshift(cur);
       show(t);
     } else {
       queue.push(t);

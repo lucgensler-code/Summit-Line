@@ -12,6 +12,7 @@ import { ExpeditionLog } from './ui/ExpeditionLog';
 import { Leaderboard } from './ui/Leaderboard';
 import { RegisterModal } from './ui/RegisterModal';
 import { getWorld } from './game/world';
+import { summitCinematic } from './game/cinematic';
 
 declare global {
   interface Window {
@@ -31,7 +32,7 @@ export function App() {
 
   useEffect(() => {
     // Lightweight debug hooks for automated playtesting.
-    window.__summit = { runtime, useGame, getWorld };
+    window.__summit = { runtime, useGame, getWorld, summitCinematic };
     const onVis = () => {
       if (document.hidden) useGame.getState().pause();
     };
