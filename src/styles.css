@@ -2941,3 +2941,33 @@ textarea {
   color: var(--ink-dim);
   font-variant-numeric: tabular-nums;
 }
+
+/* ================================================================== v0.5.1 button fixes */
+.result-card .skip {
+  margin-top: 14px;
+}
+.btn-continue,
+.modal.sign .btn-continue {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 46px;
+  margin-top: 16px;
+  padding: 0 16px;
+  font-size: 15px;
+  line-height: 1;
+}
+.btn-continue kbd {
+  margin: 0;
+  padding: 3px 6px;
+  border: none;
+  background: rgba(28, 20, 12, 0.18);
+  color: #1c140c;
+  font-size: 10.5px;
+  line-height: 1;
+}
+.reg-done + .btn-continue {
+  margin: 14px 0 6px;
+}

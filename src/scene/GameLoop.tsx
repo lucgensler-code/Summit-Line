@@ -97,10 +97,11 @@ export function GameLoop() {
       const touched = input.lookDX !== 0 || input.lookDY !== 0 || input.zoom !== 0 || input.zoomMul !== 1 || keys.yaw !== 0 || keys.pitch !== 0 || keys.zoom !== 0;
       // Keyboard camera (arrows by default): eased so a tap nudges and a hold turns smoothly.
       const kc = keyCam.current;
-      kc.yaw += (keys.yaw - kc.yaw) * (1 - Math.exp(-dt * 10));
-      kc.pitch += (keys.pitch - kc.pitch) * (1 - Math.exp(-dt * 10));
-      cam.yaw -= input.lookDX * 0.0055 + kc.yaw * 2.1 * dt;
-      cam.pitch = Math.min(1.25, Math.max(-0.2, cam.pitch + input.lookDY * 0.004 + kc.pitch * 0.9 * dt));
+      // v0.5.1: 20% slower turn rate and 20% shorter ease-out than v0.5.
+      kc.yaw += (keys.yaw - kc.yaw) * (1 - Math.exp(-dt * 12.5));
+      kc.pitch += (keys.pitch - kc.pitch) * (1 - Math.exp(-dt * 12.5));
+      cam.yaw -= input.lookDX * 0.0055 + kc.yaw * 1.68 * dt;
+      cam.pitch = Math.min(1.25, Math.max(-0.2, cam.pitch + input.lookDY * 0.004 + kc.pitch * 0.72 * dt));
       const zoomRate = Math.pow(1.9, keys.zoom * dt);
       cam.dist = Math.min(CAM_MAX, Math.max(CAM_MIN, (cam.dist * (1 + input.zoom * 0.12) * zoomRate) / input.zoomMul));
       // Recenter: glide the camera behind the climber's direction of travel.

@@ -5,7 +5,7 @@ import { fbm, mulberry32, smoothstep } from '../game/noise';
 import { clockHour, daylight } from '../game/sim';
 import { summitCinematic } from '../game/cinematic';
 import { runtime, useGame } from '../game/store';
-import { elevationFt, farHeight } from '../game/world';
+import { elevationFt, farHeight, getWorld } from '../game/world';
 import { merge, tint } from './Vegetation';
 
 // ---------------------------------------------------------------------------------------------
@@ -345,16 +345,38 @@ const PEAKS: { x: number; z: number; r: number; h: number; jag: number; snow: nu
  * trail by the mountain itself. Taller than Cindercrest so it rises above the horizon from the
  * top: a glaciated "next mountain", and two more great peaks behind it — the levels to come.
  */
-const REVEAL: { x: number; z: number; r: number; h: number; jag: number; snow: number; seed: number; haze: number }[] = [
-  { x: 380, z: -2550, r: 1000, h: 900, jag: 0.9, snow: 0.42, seed: 53, haze: 0.2 }, // the next mountain
-  { x: -1350, z: -3300, r: 1250, h: 1050, jag: 0.7, snow: 0.45, seed: 61, haze: 0.38 },
-  { x: 1900, z: -3800, r: 1300, h: 930, jag: 1.0, snow: 0.48, seed: 67, haze: 0.48 },
-  { x: -300, z: -4700, r: 1500, h: 1150, jag: 0.6, snow: 0.5, seed: 71, haze: 0.58 },
+const REVEAL: { ahead: number; lateral: number; r: number; h: number; jag: number; snow: number; seed: number; haze: number }[] = [
+  // Laid out along the final approach to the summit (v0.5.1), so they rise on the horizon directly
+  // behind the summit marker: `ahead` = distance past the summit, `lateral` = + right / − left.
+  { ahead: 2550, lateral: 0, r: 1000, h: 900, jag: 0.9, snow: 0.42, seed: 53, haze: 0.2 }, // the next mountain
+  { ahead: 3300, lateral: -1450, r: 1250, h: 1050, jag: 0.7, snow: 0.45, seed: 61, haze: 0.38 },
+  { ahead: 3800, lateral: 1550, r: 1300, h: 930, jag: 1.0, snow: 0.48, seed: 67, haze: 0.48 },
+  { ahead: 4700, lateral: -350, r: 1500, h: 1150, jag: 0.6, snow: 0.5, seed: 71, haze: 0.58 },
 ];
+
+/** Horizontal direction of the last stretch of trail into the summit (unit vector). */
+function approachDir() {
+  const m = getWorld().main;
+  const n = m.pts.length;
+  let i = n - 1;
+  while (i > 0 && m.s[n - 1] - m.s[i] < 22) i--;
+  const dx = m.pts[n - 1].x - m.pts[i].x;
+  const dz = m.pts[n - 1].z - m.pts[i].z;
+  const l = Math.hypot(dx, dz) || 1;
+  return { x: dx / l, z: dz / l };
+}
 
 export function DistantLands() {
   const geos = useMemo(() => PEAKS.map((p) => peakGeometry(p.r, p.h, p.seed, p.jag, p.snow)), []);
   const revealGeos = useMemo(() => REVEAL.map((p) => peakGeometry(p.r, p.h, p.seed, p.jag, p.snow)), []);
+  const revealPos = useMemo(() => {
+    const W = getWorld();
+    const f = approachDir();
+    // right-hand perpendicular of the approach direction
+    const rx = -f.z;
+    const rz = f.x;
+    return REVEAL.map((p) => [W.summit.x + f.x * p.ahead + rx * p.lateral, -40, W.summit.z + f.z * p.ahead + rz * p.lateral] as [number, number, number]);
+  }, []);
   // Distance fog would erase peaks this far out, so they skip scene fog and get their own fixed
   // atmospheric perspective instead: albedo dimmed, horizon colour added as emission.
   const revealMats = useMemo(
@@ -394,8 +416,8 @@ export function DistantLands() {
         </mesh>
       ))}
       <group ref={reveal} visible={false}>
-        {REVEAL.map((p, i) => (
-          <mesh key={`r${i}`} geometry={revealGeos[i]} material={revealMats[i]} position={[p.x, -40, p.z]} />
+        {REVEAL.map((_, i) => (
+          <mesh key={`r${i}`} geometry={revealGeos[i]} material={revealMats[i]} position={revealPos[i]} />
         ))}
       </group>
 

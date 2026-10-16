@@ -71,7 +71,7 @@ export function RegisterModal() {
       {signed ? (
         <>
           <p className="reg-done">✓ You signed this register on today's climb.</p>
-          <button type="button" className="btn primary reg-continue" onClick={() => setOpen(false)}>
+          <button type="button" className="btn primary btn-continue" onClick={() => setOpen(false)}>
             Continue <kbd>Enter</kbd>
           </button>
         </>

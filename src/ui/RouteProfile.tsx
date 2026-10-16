@@ -21,7 +21,7 @@ export function RouteProfile({ progress, width = 260, height = 70, labels = fals
     const minF = Math.min(...feet);
     const maxF = Math.max(...feet);
     const padX = 8;
-    const top = labels ? 22 : 4;
+    const top = labels ? 42 : 4;
     const bottom = labels ? 20 : 4;
     const X = (s: number) => padX + (s / main.length) * (width - padX * 2);
     const Y = (f: number) => height - bottom - ((f - minF) / (maxF - minF)) * (height - top - bottom);
@@ -43,29 +43,52 @@ export function RouteProfile({ progress, width = 260, height = 70, labels = fals
       const y = Y(feet[idxAt(c.s)]);
       return { x0: x - 3.5, x1: x + 3.5, y0: y - 3.5, y1: y + 3.5 };
     });
-    const cps = W.checkpoints.map((c) => {
-      const x = X(c.s);
-      const y = Y(feet[idxAt(c.s)]);
-      const text = SHORT[c.id] ?? c.name;
-      const w = text.length * 5.3 + 4;
-      const slots = [
-        { tx: x + 3, anchor: 'end' as const, ly: y - 7 },
-        { tx: x - 2, anchor: 'start' as const, ly: y + 13 },
-        { tx: x + 3, anchor: 'end' as const, ly: y - 18 },
-        { tx: x - 2, anchor: 'start' as const, ly: y + 24 },
-      ].map((sl) => {
-        // keep inside the chart
-        let tx = sl.tx;
-        if (sl.anchor === 'end' && tx - w < 2) tx = w + 2;
-        if (sl.anchor === 'start' && tx + w > width - 2) tx = width - 2 - w;
-        const x0 = sl.anchor === 'end' ? tx - w : tx;
-        return { ...sl, tx, x0, x1: x0 + w, y0: sl.ly - 9, y1: sl.ly + 2 };
-      });
-      const fits = (sl: (typeof slots)[number]) => sl.y0 > 0 && sl.y1 < height && !placed.some((p) => !(sl.x1 < p.x0 || sl.x0 > p.x1 || sl.y1 < p.y0 || sl.y0 > p.y1));
-      const pick = slots.find(fits) ?? slots[0];
-      placed.push(pick);
-      return { id: c.id, x, y, text, anchor: pick.anchor, tx: pick.tx, ly: pick.ly };
+    // The summit and crater rim labels sit directly above their dots (v0.5.1); they are placed
+    // first, summit lowest, and stack upward if they would touch.
+    const TOP_FIRST = ['summit', 'rim'];
+    const order = [...W.checkpoints].sort((a, b) => {
+      const ia = TOP_FIRST.indexOf(a.id);
+      const ib = TOP_FIRST.indexOf(b.id);
+      return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
     });
+    const byId = new Map(
+      order.map((c) => {
+        const x = X(c.s);
+        const y = Y(feet[idxAt(c.s)]);
+        const text = SHORT[c.id] ?? c.name;
+        const w = text.length * 5.3 + 4;
+        const above = TOP_FIRST.includes(c.id)
+          ? [7, 19, 31].map((dy) => ({ tx: x, anchor: 'middle' as const, ly: y - dy }))
+          : [];
+        const slots = [
+          ...above,
+          { tx: x + 3, anchor: 'end' as const, ly: y - 7 },
+          { tx: x - 2, anchor: 'start' as const, ly: y + 13 },
+          { tx: x + 3, anchor: 'end' as const, ly: y - 18 },
+          { tx: x - 2, anchor: 'start' as const, ly: y + 24 },
+        ].map((sl) => {
+          // keep inside the chart
+          let tx = sl.tx;
+          let anchor: 'start' | 'middle' | 'end' = sl.anchor;
+          if (anchor === 'middle' && tx + w / 2 > width - 2) {
+            anchor = 'end';
+            tx = width - 2;
+          } else if (anchor === 'middle' && tx - w / 2 < 2) {
+            anchor = 'start';
+            tx = 2;
+          }
+          if (anchor === 'end' && tx - w < 2) tx = w + 2;
+          if (anchor === 'start' && tx + w > width - 2) tx = width - 2 - w;
+          const x0 = anchor === 'end' ? tx - w : anchor === 'middle' ? tx - w / 2 : tx;
+          return { ...sl, anchor, tx, x0, x1: x0 + w, y0: sl.ly - 9, y1: sl.ly + 2 };
+        });
+        const fits = (sl: (typeof slots)[number]) => sl.y0 > 0 && sl.y1 < height && !placed.some((p) => !(sl.x1 < p.x0 || sl.x0 > p.x1 || sl.y1 < p.y0 || sl.y0 > p.y1));
+        const pick = slots.find(fits) ?? slots[0];
+        placed.push(pick);
+        return [c.id, { id: c.id, x, y, text, anchor: pick.anchor, tx: pick.tx, ly: pick.ly }] as const;
+      }),
+    );
+    const cps = W.checkpoints.map((c) => byId.get(c.id)!);
     return { path: d, area, cps };
   }, [W, width, height, labels]);
   const px = progress !== undefined ? 8 + Math.min(Math.max(progress, 0), 1) * (width - 16) : null;

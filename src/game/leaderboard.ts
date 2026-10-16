@@ -219,7 +219,8 @@ export function sharedBoard() {
 // it holds the player's best runs (top 5 by score ∪ top 5 by time) plus two top-level "best"
 // fields the board orders by. The board flattens runs, so a player's several good climbs can all
 // appear — not just one per player. v1 fields (v0.3) are left untouched in the same document.
-const RUNS_KEEP = 5;
+// v0.5.1: 25 runs per player — friends playing on one account all save to the same document.
+const RUNS_KEEP = 25;
 const vkey = (rk: string) => `${rk}_s${SCORE_VERSION}`;
 const F = (rk: string, f: string) => `${vkey(rk)}__${f}`;
 
@@ -268,9 +269,11 @@ export async function sharedTop(rk: string, sort: LbSort, n = 25): Promise<LbEnt
 }
 
 function keepRuns(runs: SharedRun[]) {
+  // Best 25 by score; the single fastest run always survives too (for Fastest Summits).
   const byScore = [...runs].sort((a, b) => b.score - a.score).slice(0, RUNS_KEEP);
-  const byTime = [...runs].sort((a, b) => a.t - b.t).slice(0, RUNS_KEEP);
-  return [...new Map([...byScore, ...byTime].map((r) => [r.id, r])).values()];
+  const fastest = [...runs].sort((a, b) => a.t - b.t)[0];
+  if (fastest && !byScore.includes(fastest)) byScore[byScore.length - 1] = fastest;
+  return byScore;
 }
 
 /**

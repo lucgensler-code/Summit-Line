@@ -266,7 +266,7 @@ function SignModal() {
       {reading.text.split('\n').map((l, i) => (
         <p key={i}>{l}</p>
       ))}
-      <button type="button" className="btn primary" onClick={() => setReading(null)}>
+      <button type="button" className="btn primary btn-continue" onClick={() => setReading(null)}>
         Continue <kbd>Enter</kbd>
       </button>
     </Modal>

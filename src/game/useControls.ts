@@ -95,8 +95,9 @@ export function useDesktopControls(canvasHost: React.RefObject<HTMLElement | nul
     const onMove = (e: PointerEvent) => {
       if (!dragging) return;
       if (useGame.getState().phase === 'prep') prepDrag(e.clientX - lx);
-      else input.lookDX += e.clientX - lx;
-      input.lookDY += e.clientY - ly;
+      // v0.5.1: mouse look turns 20% less per pixel (tighter, more controlled).
+      else input.lookDX += (e.clientX - lx) * 0.8;
+      input.lookDY += (e.clientY - ly) * 0.8;
       lx = e.clientX;
       ly = e.clientY;
     };

@@ -38,6 +38,8 @@ function Limb({ len, w, color, children, jointRef, y = 0, x = 0 }: { len: number
   );
 }
 
+const TOUCH = typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches;
+
 /** Kneel ground contacts in the climber's frame: [forward, sideways, height above the root]. */
 const KNEEL_CONTACTS: [number, number, number][] = [
   [0.46, 0.11, -0.01], // planted front sole
@@ -444,8 +446,9 @@ export function CameraRig() {
       camera.position.copy(tmpPos);
       look.current.copy(tmpTarget);
     }
-    camera.position.lerp(tmpPos, 1 - Math.exp(-dt * 10));
-    look.current.lerp(tmpTarget, 1 - Math.exp(-dt * 14));
+    // Desktop follows 20% tighter (less glide after the input stops); touch unchanged.
+    camera.position.lerp(tmpPos, 1 - Math.exp(-dt * (TOUCH ? 10 : 12.5)));
+    look.current.lerp(tmpTarget, 1 - Math.exp(-dt * (TOUCH ? 14 : 17.5)));
     camera.lookAt(look.current);
   });
   return null;
