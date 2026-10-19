@@ -19,7 +19,7 @@ export function GameCanvas() {
       camera={{ fov: 55, near: 0.2, far: 9000, position: [600, 300, 600] }}
       onCreated={({ gl }) => {
         gl.toneMapping = THREE.ACESFilmicToneMapping;
-        gl.toneMappingExposure = 1.12;
+        gl.toneMappingExposure = 1.02; // v0.6: a touch lower so snow keeps its shading
         (window as unknown as { __summitGL: THREE.WebGLRenderer }).__summitGL = gl;
       }}
     >

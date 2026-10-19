@@ -183,6 +183,28 @@ status panel. Add `?touch` to the URL to force touch controls on.
   pass renders once, and phones render at 30 fps with no touch drag. Lighting: magenta predawn
   for an alpine start, orange sunrise, or clean daylight.
 
+## v0.6 visual pass (art direction)
+
+Gameplay is unchanged from v0.5.2: same terrain, route, snow mechanics, scoring and saves.
+
+- **Shared style** (`src/scene/style.ts`). One palette for forest, upper mountain, rocks and
+  distance, plus `hazeMaterial()`, so future mountains reuse the look.
+- **Light.** Lavender-blue skies, peach horizons at the golden hours, warm sun with a cooler,
+  dimmer sky fill so shadows read blue and snow keeps its shape. Exposure is slightly lower.
+- **Distance.** Three rings of faceted ridgelines circle the world (one opaque draw call each),
+  with four secondary snow peaks around the compass. Haze rises with distance and toward each
+  form's base, which reads as valley mist. They use their own per-vertex haze, so scene fog can
+  be shorter and the foothills melt into the same mist. The summit reveal range keeps its
+  placement behind the summit marker.
+- **Clouds.** Soft, wind-stretched sprite wisps (one canvas texture) replace the solid puffs.
+- **Forest.** Tiered fir and spruce shapes (6-sided twisted tiers, darker lower tiers) in muted
+  pine and sage greens, with independent height and crown-width variation. The forest floor is
+  sage with warm-earth patches, and rocks are warm grey-mauve.
+- **Snow.** Off-white with cool lavender-blue shaded planes on steep faces and wind bands.
+- **Performance.** Triangles are about 3% lower in every measured view, draw calls are within
+  ±6, and there are no new lights, shadow casters, textures or post-processing. See
+  `scripts/visual-capture.mjs` for the matched capture.
+
 ## Project layout
 
 ```

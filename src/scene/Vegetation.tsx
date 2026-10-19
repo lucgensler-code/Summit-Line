@@ -2,6 +2,7 @@ import { useLayoutEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { mulberry32 } from '../game/noise';
+import { STYLE } from './style';
 import { TREELINE_H, getWorld, snowCover, type Scatter } from '../game/world';
 
 /** Bake a flat vertex colour into a geometry so parts can be merged into one draw call. */
@@ -98,42 +99,65 @@ function Chunked({ items, geometry, material, place, cast = false, receive = fal
 
 export function Trees() {
   const W = getWorld();
-  // Two species: layered fir (most of the forest) and a slender spire spruce.
+  // v0.6 tree family: a broad tiered fir and a slender tiered spruce. Few, broad facets (6-sided
+  // tiers, each twisted a little), and a baked light gradient — lower tiers darker — so the layers
+  // read like the reference's low-poly conifers. Instance scale and colour give the variety.
   const { fir, spruce, trunk, firs, spruces } = useMemo(() => {
-    const c1 = new THREE.ConeGeometry(2.3, 4.4, 7, 1).translate(0, 3.6, 0);
-    const c2 = new THREE.ConeGeometry(1.8, 3.8, 7, 1).translate(0, 5.6, 0);
-    const c3 = new THREE.ConeGeometry(1.15, 3.2, 7, 1).translate(0, 7.6, 0);
-    const fir = merge([c1, c2, c3].map((g) => tint(g, '#ffffff')));
-    const s1 = new THREE.ConeGeometry(1.5, 6.5, 6, 1).translate(0, 4.6, 0);
-    const s2 = new THREE.ConeGeometry(1.0, 4.2, 6, 1).translate(0, 8.4, 0);
-    const spruce = merge([s1, s2].map((g) => tint(g, '#ffffff')));
-    const trunk = new THREE.CylinderGeometry(0.16, 0.26, 2.4, 5).translate(0, 1.2, 0);
+    const tiers = (spec: [number, number, number][], seed: number) => {
+      const rand = mulberry32(seed);
+      const parts = spec.map(([r, h, y], i) => {
+        // Upper tiers sit inside the one below: their caps are never seen, so leave them open.
+        const g = new THREE.ConeGeometry(r, h, 6, 1, i > 0).rotateY(rand() * Math.PI).translate((rand() - 0.5) * 0.12, y, (rand() - 0.5) * 0.12);
+        const shade = 0.72 + (i / (spec.length - 1)) * 0.28;
+        return tint(g, `#${new THREE.Color(shade, shade, shade).getHexString()}`);
+      });
+      return merge(parts);
+    };
+    const fir = tiers(
+      [
+        [2.5, 3.4, 3.0],
+        [2.05, 3.0, 4.6],
+        [1.55, 2.6, 6.0],
+        [0.95, 2.4, 7.4],
+      ],
+      11,
+    );
+    const spruce = tiers(
+      [
+        [1.65, 3.6, 3.2],
+        [1.35, 3.2, 4.9],
+        [1.05, 2.9, 6.4],
+        [0.75, 2.6, 7.8],
+        [0.42, 2.0, 9.0],
+      ],
+      23,
+    );
+    const trunk = new THREE.CylinderGeometry(0.17, 0.3, 2.4, 5).translate(0, 1.2, 0);
     const firs = W.trees.filter((t) => t.tint < 0.68 || t.y > TREELINE_H - 5);
     const spruces = W.trees.filter((t) => !(t.tint < 0.68 || t.y > TREELINE_H - 5));
     return { fir, spruce, trunk, firs, spruces };
   }, [W]);
-  const greens = useMemo(
-    () => [new THREE.Color('#2c5530'), new THREE.Color('#3c6a32'), new THREE.Color('#24473a'), new THREE.Color('#4c7238'), new THREE.Color('#335c2a')],
-    [],
-  );
-  const frost = useMemo(() => new THREE.Color('#b9c8c4'), []);
+  const greens = STYLE.pine;
+  const frost = STYLE.frost;
   const place = useMemo(
     () => (it: Scatter) => {
       const alpine = it.y > TREELINE_H - 5;
       const g = greens[Math.floor(it.tint * 997) % greens.length];
-      col.copy(g).multiplyScalar(alpine ? 0.88 : 0.92 + ((it.tint * 7.3) % 1) * 0.2);
+      col.copy(g).lerp(STYLE.sage, ((it.tint * 13.7) % 1) * 0.25).multiplyScalar(alpine ? 0.9 : 0.94 + ((it.tint * 7.3) % 1) * 0.14);
       // Dusting of snow on high trees
-      if (it.y > 150) col.lerp(frost, 0.28);
+      if (it.y > 150) col.lerp(frost, 0.25);
       const s = it.s;
-      return { sx: s * (0.9 + it.tint * 0.2), sy: s * (alpine ? 0.8 : 1.0 + it.tint * 0.35), sz: s * (0.9 + it.tint * 0.2), color: col };
+      // Height and crown width vary independently for distinct silhouettes.
+      const wide = 0.82 + ((it.tint * 5.1) % 1) * 0.36;
+      return { sx: s * wide, sy: s * (alpine ? 0.78 : 0.92 + it.tint * 0.4), sz: s * wide, color: col };
     },
     [greens, frost],
   );
   const placeTrunk = useMemo(() => (it: Scatter) => ({ sx: it.s, sy: it.s, sz: it.s }), []);
   const mats = useMemo(
     () => ({
-      foliage: new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.88 }),
-      trunk: new THREE.MeshStandardMaterial({ color: '#553826', roughness: 1 }),
+      foliage: new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.95 }),
+      trunk: new THREE.MeshStandardMaterial({ color: STYLE.trunk, roughness: 1 }),
     }),
     [],
   );
@@ -157,14 +181,15 @@ export function Rocks() {
     const big = W.rocks.filter((r) => r.s > 1.2);
     return [small.filter((r) => r.tint < 0.55), small.filter((r) => r.tint >= 0.55), big.filter((r) => r.tint < 0.55), big.filter((r) => r.tint >= 0.55)];
   }, [W]);
-  const mat = useMemo(() => new THREE.MeshStandardMaterial({ flatShading: true, roughness: 0.92 }), []);
+  const mat = useMemo(() => new THREE.MeshStandardMaterial({ flatShading: true, roughness: 0.96 }), []);
   const palette = useMemo(
     () => ({
-      gray: new THREE.Color('#77706a'),
-      dark: new THREE.Color('#433a37'),
-      red: new THREE.Color('#8c4632'),
-      lichen: new THREE.Color('#8a8a5e'),
-      snow: new THREE.Color('#e9eef3'),
+      gray: STYLE.rockWarm,
+      dark: STYLE.rockDark,
+      red: new THREE.Color('#7e4f42'),
+      cool: STYLE.rockCool,
+      lichen: STYLE.lichen,
+      snow: STYLE.snow,
     }),
     [],
   );
@@ -173,7 +198,7 @@ export function Rocks() {
       const r = mulberry32(i * 31 + 5);
       if (it.y > 165) col.copy(palette.red).lerp(palette.dark, r());
       else if (it.y > TREELINE_H) col.copy(palette.gray).lerp(palette.lichen, r() * 0.6);
-      else col.copy(palette.gray).lerp(palette.dark, r() * 0.5);
+      else col.copy(palette.gray).lerp(palette.cool, r() * 0.5).lerp(palette.dark, r() * 0.25);
       if (snowCover(it.x, it.z, it.y, 0.3) > 0.6) col.lerp(palette.snow, 0.55);
       return {
         sx: it.s * (0.8 + r() * 0.6),
@@ -200,7 +225,7 @@ export function Shrubs() {
   const W = getWorld();
   const geo = useMemo(() => jitter(new THREE.DodecahedronGeometry(0.9, 0).translate(0, 0.35, 0), 0.3, 3), []);
   const mat = useMemo(() => new THREE.MeshStandardMaterial({ flatShading: true, roughness: 1 }), []);
-  const cols = useMemo(() => [new THREE.Color('#5a7a2c'), new THREE.Color('#7a8a36'), new THREE.Color('#8c6d38'), new THREE.Color('#3f6430'), new THREE.Color('#9a5a6a')], []);
+  const cols = useMemo(() => [new THREE.Color('#5d6f3c'), new THREE.Color('#77804a'), new THREE.Color('#8a7046'), new THREE.Color('#4a5f38'), new THREE.Color('#86606a')], []);
   const place = useMemo(
     () => (it: Scatter) => {
       col.copy(cols[Math.floor(it.tint * cols.length) % cols.length]);

@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import * as THREE from 'three';
 import { fbm, lerp, smoothstep } from '../game/noise';
+import { STYLE } from './style';
 import {
   GRID_STEP,
   HALF,
@@ -16,19 +17,22 @@ import {
 } from '../game/world';
 
 const C = (hex: string) => new THREE.Color(hex);
+// v0.6: muted sage forest floor with warm earth patches, dusty cinder, off-white snow whose
+// shaded planes go cool lavender-blue (shared palette in ./style).
 const PAL = {
-  duff: C('#6a5a36'),
-  moss: C('#3f6a2a'),
-  forest: C('#4f6e33'),
-  meadowDry: C('#a59a52'),
-  meadowGreen: C('#6c8c38'),
-  cinder: C('#93492f'),
-  cinderDark: C('#5c362c'),
-  pumice: C('#a89582'),
-  basalt: C('#433a3a'),
-  snow: C('#f4f8fc'),
-  snowShade: C('#c4d6ec'),
-  plain: C('#3e5629'),
+  duff: STYLE.needleDuff,
+  moss: STYLE.moss,
+  forest: STYLE.forestFloor,
+  earth: STYLE.earth,
+  meadowDry: STYLE.meadowDry,
+  meadowGreen: STYLE.meadowGreen,
+  cinder: STYLE.cinder,
+  cinderDark: STYLE.cinderDark,
+  pumice: STYLE.pumice,
+  basalt: STYLE.basalt,
+  snow: STYLE.snow,
+  snowShade: STYLE.snowShade,
+  plain: C('#4a5c3a'),
   shore: C('#74674f'),
 };
 
@@ -39,8 +43,9 @@ export function terrainColor(x: number, z: number, h: number, slope: number, out
   const n1 = fbm(x / 38, z / 38, 3, 201) * 0.5 + 0.5;
   const n2 = fbm(x / 9, z / 9, 2, 211) * 0.5 + 0.5;
 
-  // Forest floor
-  out.copy(PAL.forest).lerp(PAL.duff, n1 * 0.7).lerp(PAL.moss, smoothstep(0.55, 0.8, n2) * 0.5);
+  // Forest floor: sage with selective warm-earth clearings (broad patches, not speckle)
+  out.copy(PAL.forest).lerp(PAL.duff, n1 * 0.35).lerp(PAL.moss, smoothstep(0.55, 0.8, n2) * 0.4);
+  out.lerp(PAL.earth, smoothstep(0.62, 0.78, n1) * 0.55);
   // Meadow above treeline
   const meadow = smoothstep(TREELINE_H - 14, TREELINE_H + 8, h);
   tmp.copy(PAL.meadowDry).lerp(PAL.meadowGreen, smoothstep(0.35, 0.7, n1));
@@ -60,8 +65,10 @@ export function terrainColor(x: number, z: number, h: number, slope: number, out
   out.lerp(PAL.shore, smoothstep(LAKE.r + 6, LAKE.r - 1, dl) * 0.8);
   // Snow
   const snow = snowCover(x, z, h, slope);
-  tmp2.copy(PAL.snow).lerp(PAL.snowShade, n2 * 0.35 + smoothstep(0.6, 1.1, slope) * 0.4);
-  out.lerp(tmp2, smoothstep(0.25, 0.65, snow));
+  // Snow: off-white, cooler on steep faces and in broad wind-scoured bands; a little cinder shows
+  // through only at the ragged edge of the snowfield (gameplay snow coverage is unchanged).
+  tmp2.copy(PAL.snow).lerp(PAL.snowShade, n2 * 0.3 + smoothstep(0.45, 1.05, slope) * 0.55 + smoothstep(0.55, 0.8, n1) * 0.2);
+  out.lerp(tmp2, smoothstep(0.3, 0.68, snow + (n1 - 0.5) * 0.12));
   // Distant plain
   out.lerp(PAL.plain, smoothstep(HALF - 120, HALF - 10, Math.max(Math.abs(x), Math.abs(z))) * 0.7);
   // Subtle brightness variation
@@ -204,8 +211,8 @@ export function FarTerrain() {
   );
 }
 
-const FAR_FOREST = new THREE.Color('#2d4a26');
-const FAR_SNOW = new THREE.Color('#dfe8f0');
+const FAR_FOREST = STYLE.farForest;
+const FAR_SNOW = STYLE.farSnow;
 
 const TRAIL_COLORS = {
   dirt: C('#a7804f'),

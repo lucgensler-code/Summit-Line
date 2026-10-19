@@ -5,8 +5,8 @@ import { fbm, mulberry32, smoothstep } from '../game/noise';
 import { clockHour, daylight } from '../game/sim';
 import { summitCinematic } from '../game/cinematic';
 import { runtime, useGame } from '../game/store';
-import { elevationFt, farHeight, getWorld } from '../game/world';
-import { merge, tint } from './Vegetation';
+import { elevationFt, getWorld } from '../game/world';
+import { STYLE, hazeMaterial } from './style';
 
 // ---------------------------------------------------------------------------------------------
 // Time-of-day palette.
@@ -23,18 +23,21 @@ interface Key {
   fog: number;
 }
 
+// v0.6 palette: lavender-blue skies, peach horizons at the golden hours, warm sun and a cool
+// lavender sky fill so shadows read blue against sunlit faces (hemisphere intensities stay below
+// the sun's so form is legible on snow).
 const KEYS: Key[] = [
-  { h: 3.5, top: '#050b22', horizon: '#1a2546', sun: '#7d8fc4', sunI: 0.38, hemiSky: '#46558a', hemiGround: '#151820', hemiI: 0.85, fog: 0.75 },
-  { h: 5.0, top: '#0d1a46', horizon: '#57466e', sun: '#8a95c8', sunI: 0.45, hemiSky: '#5a66a0', hemiGround: '#1d1d24', hemiI: 0.95, fog: 0.8 },
-  { h: 5.9, top: '#1f3577', horizon: '#ec8a5e', sun: '#ff8a5c', sunI: 1.0, hemiSky: '#9a8fbe', hemiGround: '#40302a', hemiI: 1.0, fog: 0.85 },
-  { h: 6.8, top: '#3466b4', horizon: '#ffbc8a', sun: '#ffb877', sunI: 2.7, hemiSky: '#b6c4e2', hemiGround: '#5e4a36', hemiI: 1.35, fog: 0.95 },
-  { h: 8.5, top: '#2f74d0', horizon: '#c9e2f4', sun: '#fff0d4', sunI: 3.1, hemiSky: '#bcd6f4', hemiGround: '#5e4d38', hemiI: 1.3, fog: 1 },
-  { h: 12, top: '#246dd0', horizon: '#cfe5f6', sun: '#ffffff', sunI: 3.2, hemiSky: '#c4dcf6', hemiGround: '#62513d', hemiI: 1.35, fog: 1 },
-  { h: 15.5, top: '#3474c6', horizon: '#ecd8b8', sun: '#ffe2b0', sunI: 2.8, hemiSky: '#c6d2e8', hemiGround: '#604c36', hemiI: 1.3, fog: 0.85 },
-  { h: 17.2, top: '#3566b4', horizon: '#f7c47e', sun: '#ffc070', sunI: 2.4, hemiSky: '#c4c6d8', hemiGround: '#5e4632', hemiI: 1.2, fog: 0.8 },
-  { h: 18.3, top: '#253d80', horizon: '#ff8a52', sun: '#ff7a45', sunI: 1.5, hemiSky: '#a892c0', hemiGround: '#40302a', hemiI: 1.1, fog: 0.75 },
-  { h: 19.2, top: '#16225a', horizon: '#c0607a', sun: '#d06a7a', sunI: 0.7, hemiSky: '#6a62a0', hemiGround: '#221c24', hemiI: 0.95, fog: 0.72 },
-  { h: 20.2, top: '#060c26', horizon: '#232a50', sun: '#7d8fc4', sunI: 0.38, hemiSky: '#46558a', hemiGround: '#151820', hemiI: 0.85, fog: 0.72 },
+  { h: 3.5, top: '#070c26', horizon: '#1d2548', sun: '#7d8fc4', sunI: 0.38, hemiSky: '#4a5590', hemiGround: '#171a24', hemiI: 0.8, fog: 0.75 },
+  { h: 5.0, top: '#1b2152', horizon: '#6a4d7c', sun: '#9a8ec8', sunI: 0.5, hemiSky: '#6a679f', hemiGround: '#221d28', hemiI: 0.9, fog: 0.8 },
+  { h: 5.9, top: '#3a4387', horizon: '#ee9a80', sun: '#ff9a6a', sunI: 1.1, hemiSky: '#9c92c6', hemiGround: '#46363a', hemiI: 0.95, fog: 0.85 },
+  { h: 6.8, top: '#5d78c0', horizon: '#ffc4a2', sun: '#ffc290', sunI: 2.7, hemiSky: '#b3b6dc', hemiGround: '#5e4c44', hemiI: 1.1, fog: 0.95 },
+  { h: 8.5, top: '#5a84cc', horizon: '#d8e0ee', sun: '#fff0d8', sunI: 3.0, hemiSky: '#b0bde4', hemiGround: '#62544a', hemiI: 0.98, fog: 1 },
+  { h: 12, top: '#5786d0', horizon: '#dce4f0', sun: '#fff8ec', sunI: 3.1, hemiSky: '#b2c0e6', hemiGround: '#64564a', hemiI: 0.98, fog: 1 },
+  { h: 15.5, top: '#5d84c8', horizon: '#e8dccc', sun: '#ffe6c2', sunI: 2.9, hemiSky: '#bcc0e0', hemiGround: '#62523f', hemiI: 1.08, fog: 0.92 },
+  { h: 17.2, top: '#6577bd', horizon: '#f6c6a2', sun: '#ffc27e', sunI: 2.5, hemiSky: '#bab2d8', hemiGround: '#5c463c', hemiI: 1.05, fog: 0.88 },
+  { h: 18.3, top: '#5a5ea8', horizon: '#f4a688', sun: '#ff9864', sunI: 1.8, hemiSky: '#a99bce', hemiGround: '#46383e', hemiI: 1.0, fog: 0.85 },
+  { h: 19.2, top: '#272b66', horizon: '#c27492', sun: '#d07486', sunI: 0.75, hemiSky: '#6e66a6', hemiGround: '#241e28', hemiI: 0.9, fog: 0.78 },
+  { h: 20.2, top: '#080e2a', horizon: '#252c52', sun: '#7d8fc4', sunI: 0.38, hemiSky: '#4a5590', hemiGround: '#171a24', hemiI: 0.8, fog: 0.75 },
 ];
 
 const cB = new THREE.Color();
@@ -263,9 +266,14 @@ export function Atmosphere() {
     const h24 = ((hour % 24) + 24) % 24;
     const afternoon = smoothstep(13, 17, h24) * (1 - smoothstep(18, 20, h24));
     const elevBoost = p ? smoothstep(7000, 10000, elevationFt(p.y)) : 0.4;
-    fog.color.copy(pal.horizon);
-    fog.near = 160 + elevBoost * 200;
-    fog.far = (2300 + elevBoost * 1600) * pal.fog * (1 - afternoon * 0.35);
+    // Haze: a cool blend of horizon and sky light, so distance turns paler and bluer rather than
+    // orange. Distant ranges read the same colour (HAZE) for seamless atmospheric perspective.
+    HAZE.copy(pal.horizon).lerp(pal.hemiSky, 0.45).lerp(pal.top, 0.08);
+    fog.color.copy(HAZE);
+    // The far ranges carry their own haze, so scene fog can be shorter: foothills beyond the map
+    // melt into the same mist the ranges rise out of.
+    fog.near = 120 + elevBoost * 140;
+    fog.far = (1900 + elevBoost * 900) * pal.fog * (1 - afternoon * 0.2);
     {
       const u = skyMaterial.uniforms;
       u.uTop.value.copy(pal.top);
@@ -301,16 +309,43 @@ export function Atmosphere() {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Distant mountains and ground beyond the playable map.
+// Distant mountains and ground beyond the playable map (v0.6).
+//
+// Everything past the playable map uses `hazeMaterial`: albedo dimmed by a per-vertex haze amount
+// plus the current haze colour as emission. Haze rises with distance (paler, bluer ranges) and
+// toward the base of each form (valley mist), so the layers read like the reference panorama at
+// the cost of one opaque draw call per form — no transparency, no volumetrics.
 
-function peakGeometry(radius: number, height: number, seed: number, jagged: number, snowLine: number) {
-  const g = new THREE.ConeGeometry(radius, height, 48, 14, true);
+/** Live haze colour: a cool blend of the horizon and sky light, updated by <Atmosphere/>. */
+export const HAZE = new THREE.Color('#c8d0e4');
+
+const _c = new THREE.Color();
+/** Bake vertex colours (albedo × (1 − haze)) and uv.y = haze into a non-indexed geometry. */
+function bakeHaze(g: THREE.BufferGeometry, albedo: (x: number, y: number, z: number, out: THREE.Color) => void, haze: (y: number) => number) {
+  const geo = g.index ? g.toNonIndexed() : g;
+  const pos = geo.attributes.position;
+  const col = new Float32Array(pos.count * 3);
+  const uv = new Float32Array(pos.count * 2);
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i);
+    const y = pos.getY(i);
+    const z = pos.getZ(i);
+    const h = Math.min(1, Math.max(0, haze(y)));
+    albedo(x, y, z, _c);
+    _c.multiplyScalar(1 - h);
+    col.set([_c.r, _c.g, _c.b], i * 3);
+    uv.set([0.5, h], i * 2);
+  }
+  geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+  geo.computeVertexNormals();
+  return geo;
+}
+
+/** A broad, faceted volcano/peak with irregular snow (local coordinates, base at y = 0). */
+function peakGeometry(radius: number, height: number, seed: number, jagged: number, snowLine: number, baseHaze: number) {
+  const g = new THREE.ConeGeometry(radius, height, 22, 7, true);
   const pos = g.attributes.position;
-  const colors = new Float32Array(pos.count * 3);
-  const rock = new THREE.Color('#4c5866');
-  const forest = new THREE.Color('#2c3a33');
-  const snow = new THREE.Color('#e8eef4');
-  const c = new THREE.Color();
   for (let i = 0; i < pos.count; i++) {
     const x = pos.getX(i);
     const y = pos.getY(i) + height / 2;
@@ -321,37 +356,92 @@ function peakGeometry(radius: number, height: number, seed: number, jagged: numb
     const rs = 1 + n * (1 - k) * 0.6;
     const yy = Math.pow(k, 1.25 + 0.4 * Math.sin(seed)) * height * (1 + n * 0.25);
     pos.setXYZ(i, x * rs, yy, z * rs);
-    const snowAmt = smoothstep(snowLine - 0.06, snowLine + 0.04, k + n * 0.15);
-    c.copy(forest).lerp(rock, smoothstep(0.15, 0.4, k)).lerp(snow, snowAmt);
-    colors.set([c.r, c.g, c.b], i * 3);
   }
-  g.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-  g.computeVertexNormals();
-  return g;
+  return bakeHaze(
+    g,
+    (x, y, z, out) => {
+      const k = y / height;
+      const a = Math.atan2(x, z);
+      const n = fbm(Math.cos(a) * 3 + seed, k * 4, 3, seed + 3);
+      const snowAmt = smoothstep(snowLine - 0.05, snowLine + 0.05, k + n * 0.2);
+      out.copy(STYLE.farForest).lerp(STYLE.farRock, smoothstep(0.12, 0.35, k)).lerp(STYLE.farSnow, snowAmt);
+    },
+    (y) => baseHaze + (1 - baseHaze) * smoothstep(height * 0.32, 0, y) * 0.75,
+  );
 }
 
-const PEAKS: { x: number; z: number; r: number; h: number; jag: number; snow: number; seed: number }[] = [
-  { x: 1850, z: 250, r: 750, h: 230, jag: 1.1, snow: 0.7, seed: 11 }, // broken eastern crags
-  { x: 1650, z: 2300, r: 900, h: 300, jag: 0.25, snow: 0.62, seed: 19 }, // smooth southern volcano
-  { x: -2300, z: 900, r: 1100, h: 180, jag: 0.6, snow: 0.9, seed: 23 },
-  { x: -1500, z: 2700, r: 1300, h: 150, jag: 0.5, snow: 2, seed: 29 },
-  { x: 3000, z: -1900, r: 1500, h: 220, jag: 0.6, snow: 0.8, seed: 31 },
-  { x: 600, z: -3600, r: 1600, h: 260, jag: 0.7, snow: 0.7, seed: 37 },
-  { x: -3300, z: -1300, r: 1600, h: 240, jag: 0.7, snow: 0.8, seed: 41 },
+/**
+ * A full ring of ridgelines around the world at radius `R`: one band of broad facets whose
+ * crest varies with angle. Three of these, paler with distance, give every heading layered
+ * mountain profiles and hide the map boundary.
+ */
+function ridgeRing(R: number, seg: number, crest: number, amp: number, seed: number, haze: number, snowY: number) {
+  const pos: number[] = [];
+  // Separate mountains rather than a wall: a periodic noise raised to a power gives broad peaks
+  // and saddles that dip to the foothills, plus a sharper secondary layer for summits.
+  const crestAt = (a: number) => {
+    const n = fbm(Math.cos(a) * 3.2 + seed, Math.sin(a) * 3.2 - seed, 3, seed) * 0.5 + 0.5;
+    const peak = Math.max(0, fbm(Math.cos(a) * 7 + seed * 2, Math.sin(a) * 7, 2, seed + 9));
+    return crest * 0.25 + amp * (Math.pow(n, 2.2) * 2.6 + Math.pow(peak, 1.5) * 1.2);
+  };
+  const rows = (a: number, j: number) => {
+    const c = crestAt(a);
+    const wob = fbm(Math.cos(a) * 9 + j, Math.sin(a) * 9, 2, seed + 4) * 90;
+    return [
+      [Math.sin(a) * (R - 420), -90, Math.cos(a) * (R - 420)],
+      [Math.sin(a) * (R - 150 + wob), c * 0.5, Math.cos(a) * (R - 150 + wob)],
+      [Math.sin(a) * (R + 80), c, Math.cos(a) * (R + 80)],
+    ];
+  };
+  let prev = rows(0, 0);
+  for (let j = 1; j <= seg; j++) {
+    const cur = rows((j / seg) * Math.PI * 2, j);
+    for (let r = 0; r < 2; r++) {
+      const [a0, a1, b0, b1] = [prev[r], prev[r + 1], cur[r], cur[r + 1]];
+      // Two triangles per cell, wound to face the centre of the world.
+      pos.push(...a0, ...b0, ...a1, ...a1, ...b0, ...b1);
+    }
+    prev = cur;
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  return bakeHaze(
+    g,
+    (x, y, z, out) => {
+      const n = fbm(x / 600, z / 600, 2, seed + 7) * 0.5 + 0.5;
+      out.copy(STYLE.farForest).lerp(STYLE.farRock, smoothstep(crest * 0.25, crest * 0.9, y) * (0.6 + n * 0.4)).lerp(STYLE.farSnow, smoothstep(snowY - 25, snowY + 15, y + n * 40));
+    },
+    // Valley mist: haze thickens toward the foot of each range.
+    (y) => haze + (1 - haze) * smoothstep(crest * 0.75, -40, y) * 0.85,
+  );
+}
+
+const RINGS = [
+  { R: 2300, seg: 180, crest: 120, amp: 120, seed: 5, haze: 0.38, snowY: 290 },
+  { R: 3300, seg: 150, crest: 150, amp: 150, seed: 13, haze: 0.54, snowY: 290 },
+  { R: 4700, seg: 120, crest: 200, amp: 200, seed: 29, haze: 0.68, snowY: 330 },
+];
+
+/** Secondary snow peaks spread around the compass (the reveal range is separate, below). */
+const PEAKS: { x: number; z: number; r: number; h: number; jag: number; snow: number; seed: number; haze: number }[] = [
+  { x: 3300, z: 600, r: 1100, h: 560, jag: 0.6, snow: 0.55, seed: 11, haze: 0.5 }, // east
+  { x: 1900, z: 3400, r: 1200, h: 620, jag: 0.35, snow: 0.5, seed: 19, haze: 0.52 }, // south-east volcano
+  { x: -1800, z: 3700, r: 1250, h: 540, jag: 0.7, snow: 0.55, seed: 23, haze: 0.56 }, // south-west
+  { x: 900, z: -4300, r: 1300, h: 600, jag: 0.8, snow: 0.5, seed: 37, haze: 0.6 }, // north
 ];
 
 /**
- * The summit reveal (v0.5): the range beyond Cindercrest, north of the summit, hidden from the
- * trail by the mountain itself. Taller than Cindercrest so it rises above the horizon from the
- * top: a glaciated "next mountain", and two more great peaks behind it — the levels to come.
+ * The summit reveal: the range beyond Cindercrest, hidden from the trail by the mountain itself.
+ * Taller than Cindercrest so it rises above the horizon from the top: a glaciated "next mountain"
+ * and three more great peaks around it — the levels to come.
  */
 const REVEAL: { ahead: number; lateral: number; r: number; h: number; jag: number; snow: number; seed: number; haze: number }[] = [
   // Laid out along the final approach to the summit (v0.5.1), so they rise on the horizon directly
   // behind the summit marker: `ahead` = distance past the summit, `lateral` = + right / − left.
-  { ahead: 2550, lateral: 0, r: 1000, h: 900, jag: 0.9, snow: 0.42, seed: 53, haze: 0.2 }, // the next mountain
-  { ahead: 3300, lateral: -1450, r: 1250, h: 1050, jag: 0.7, snow: 0.45, seed: 61, haze: 0.38 },
-  { ahead: 3800, lateral: 1550, r: 1300, h: 930, jag: 1.0, snow: 0.48, seed: 67, haze: 0.48 },
-  { ahead: 4700, lateral: -350, r: 1500, h: 1150, jag: 0.6, snow: 0.5, seed: 71, haze: 0.58 },
+  { ahead: 2550, lateral: 0, r: 1000, h: 900, jag: 0.9, snow: 0.42, seed: 53, haze: 0.16 }, // the next mountain
+  { ahead: 3300, lateral: -1450, r: 1250, h: 1050, jag: 0.7, snow: 0.45, seed: 61, haze: 0.32 },
+  { ahead: 3800, lateral: 1550, r: 1300, h: 930, jag: 1.0, snow: 0.48, seed: 67, haze: 0.42 },
+  { ahead: 4700, lateral: -350, r: 1500, h: 1150, jag: 0.6, snow: 0.5, seed: 71, haze: 0.52 },
 ];
 
 /** Horizontal direction of the last stretch of trail into the summit (unit vector). */
@@ -367,8 +457,9 @@ function approachDir() {
 }
 
 export function DistantLands() {
-  const geos = useMemo(() => PEAKS.map((p) => peakGeometry(p.r, p.h, p.seed, p.jag, p.snow)), []);
-  const revealGeos = useMemo(() => REVEAL.map((p) => peakGeometry(p.r, p.h, p.seed, p.jag, p.snow)), []);
+  const ringGeos = useMemo(() => RINGS.map((r) => ridgeRing(r.R, r.seg, r.crest, r.amp, r.seed, r.haze, r.snowY)), []);
+  const geos = useMemo(() => PEAKS.map((p) => peakGeometry(p.r, p.h, p.seed, p.jag, p.snow, p.haze)), []);
+  const revealGeos = useMemo(() => REVEAL.map((p) => peakGeometry(p.r, p.h, p.seed, p.jag, p.snow, p.haze)), []);
   const revealPos = useMemo(() => {
     const W = getWorld();
     const f = approachDir();
@@ -377,17 +468,19 @@ export function DistantLands() {
     const rz = f.x;
     return REVEAL.map((p) => [W.summit.x + f.x * p.ahead + rx * p.lateral, -40, W.summit.z + f.z * p.ahead + rz * p.lateral] as [number, number, number]);
   }, []);
-  // Distance fog would erase peaks this far out, so they skip scene fog and get their own fixed
-  // atmospheric perspective instead: albedo dimmed, horizon colour added as emission.
-  const revealMats = useMemo(
-    () => REVEAL.map(() => new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 1, fog: false })),
-    [],
-  );
+  // One shared haze material for rings and peaks; the reveal has its own (it fades in).
+  const farMat = useMemo(() => {
+    const m = hazeMaterial();
+    m.side = THREE.DoubleSide; // rings are seen from inside
+    return m;
+  }, []);
+  const revealMat = useMemo(() => hazeMaterial(), []);
   // Kept for the reveal: hidden on the home screen and on the way up, faded in on the final rim
   // traverse, fully there for the summit celebration.
   const reveal = useRef<THREE.Group>(null);
   const fade = useRef(0);
   useFrame((_, dt) => {
+    farMat.emissive.copy(HAZE);
     const g = useGame.getState();
     const p = runtime.player;
     const want = g.phase === 'summit' || (p && g.phase !== 'prep' && elevationFt(p.y) > 9950) ? 1 : 0;
@@ -395,67 +488,87 @@ export function DistantLands() {
     if (want === 0 && fade.current < 0.01) fade.current = 0;
     if (reveal.current) reveal.current.visible = fade.current > 0.005;
     if (!reveal.current?.visible) return;
-    const pal = samplePalette(currentHour());
-    REVEAL.forEach((p, i) => {
-      const m = revealMats[i];
-      m.color.setScalar(1 - p.haze);
-      m.emissive.copy(pal.horizon).multiplyScalar(p.haze * 0.9);
-      const solid = fade.current > 0.995;
-      if (m.transparent === solid) {
-        m.transparent = !solid;
-        m.needsUpdate = true;
-      }
-      m.opacity = fade.current;
-    });
+    revealMat.emissive.copy(HAZE);
+    const solid = fade.current > 0.995;
+    if (revealMat.transparent === solid) {
+      revealMat.transparent = !solid;
+      revealMat.needsUpdate = true;
+    }
+    revealMat.opacity = fade.current;
   });
   return (
     <group>
+      {RINGS.map((_, i) => (
+        <mesh key={`ring${i}`} geometry={ringGeos[i]} material={farMat} frustumCulled={false} />
+      ))}
       {PEAKS.map((p, i) => (
-        <mesh key={i} geometry={geos[i]} position={[p.x, farHeight(p.x, p.z) - 18, p.z]}>
-          <meshStandardMaterial vertexColors flatShading roughness={1} />
-        </mesh>
+        <mesh key={i} geometry={geos[i]} material={farMat} position={[p.x, -60, p.z]} />
       ))}
       <group ref={reveal} visible={false}>
         {REVEAL.map((_, i) => (
-          <mesh key={`r${i}`} geometry={revealGeos[i]} material={revealMats[i]} position={revealPos[i]} />
+          <mesh key={`r${i}`} geometry={revealGeos[i]} material={revealMat} position={revealPos[i]} />
         ))}
       </group>
-
     </group>
   );
 }
 
+// ---------------------------------------------------------------------------------------------
+// Clouds: a few soft, wind-stretched wisps (v0.6) instead of solid puffs. One shared canvas
+// texture, sprites at high altitude, tinted by the light of the hour.
+
+function cloudTexture() {
+  const cv = document.createElement('canvas');
+  cv.width = 256;
+  cv.height = 64;
+  const ctx = cv.getContext('2d')!;
+  const rand = mulberry32(17);
+  for (let i = 0; i < 14; i++) {
+    const x = 30 + rand() * 196;
+    const y = 26 + (rand() - 0.5) * 14;
+    const rx = 26 + rand() * 40;
+    const ry = 8 + rand() * 9;
+    const g = ctx.createRadialGradient(x, y, 0, x, y, rx);
+    g.addColorStop(0, 'rgba(255,255,255,0.42)');
+    g.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.scale(1, ry / rx);
+    ctx.translate(-x, -y);
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, 256, 64);
+    ctx.restore();
+  }
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
 export function Clouds() {
   const group = useRef<THREE.Group>(null);
-  const { geo, items } = useMemo(() => {
+  const { mat, items } = useMemo(() => {
     const rand = mulberry32(99);
-    const parts: THREE.BufferGeometry[] = [];
-    for (let i = 0; i < 7; i++) {
-      const s = 14 + rand() * 18;
-      parts.push(tint(new THREE.IcosahedronGeometry(s, 1).scale(1.6, 0.6, 1).translate((rand() - 0.5) * 60, (rand() - 0.5) * 6, (rand() - 0.5) * 30), '#ffffff'));
-    }
-    const geo = merge(parts);
-    const items = Array.from({ length: 16 }, () => {
+    const mat = new THREE.SpriteMaterial({ map: cloudTexture(), transparent: true, depthWrite: false, fog: false });
+    const items = Array.from({ length: 14 }, () => {
       const a = rand() * Math.PI * 2;
-      const r = 900 + rand() * 1900;
-      return { x: Math.cos(a) * r, z: Math.sin(a) * r, y: 420 + rand() * 260, s: 0.8 + rand() * 1.4, rot: rand() * 3 };
+      const r = 1100 + rand() * 1900;
+      return { x: Math.cos(a) * r, z: Math.sin(a) * r, y: 480 + rand() * 280, w: 420 + rand() * 520 };
     });
-    return { geo, items };
+    return { mat, items };
   }, []);
-  const mat = useRef<THREE.MeshStandardMaterial>(null);
   useFrame((_, dt) => {
     if (group.current) group.current.rotation.y += dt * 0.0025;
-    if (mat.current) {
-      const light = daylight(currentHour());
-      mat.current.opacity = 0.35 + light * 0.5;
-    }
+    const hour = currentHour();
+    const pal = samplePalette(hour);
+    const light = daylight(hour);
+    // Sunlit white by day, peach at golden hour, dim lavender at night.
+    mat.color.copy(pal.sun).lerp(HAZE, 0.35).multiplyScalar(0.55 + light * 0.5);
+    mat.opacity = 0.55 + light * 0.35;
   });
   return (
     <group ref={group}>
       {items.map((c, i) => (
-        <mesh key={i} geometry={geo} position={[c.x, c.y, c.z]} scale={c.s} rotation={[0, c.rot, 0]}>
-          <meshStandardMaterial ref={i === 0 ? mat : undefined} color="#ffffff" flatShading transparent opacity={0.85} roughness={1} depthWrite={false} />
-        </mesh>
+        <sprite key={i} material={mat} position={[c.x, c.y, c.z]} scale={[c.w, c.w * 0.22, 1]} />
       ))}
     </group>
   );
