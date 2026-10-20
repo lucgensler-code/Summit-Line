@@ -7,7 +7,7 @@ const p = await b.newPage({ viewport: { width: 1000, height: 560 } });
 const errs = [];
 p.on('pageerror', (e) => errs.push(e.message));
 p.on('console', (m) => m.type() === 'error' && errs.push(m.text().slice(0, 200)));
-await p.goto('http://localhost:5173/');
+await p.goto(process.env.CAPTURE_URL || 'http://localhost:5173/');
 await p.waitForSelector('.start-btn', { timeout: 120000 });
 await p.click('.start-btn');
 await p.waitForTimeout(2000);
