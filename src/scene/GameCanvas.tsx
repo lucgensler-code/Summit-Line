@@ -7,7 +7,7 @@ import { PerfGovernor, PrepMode } from './Performance';
 import { Gems } from './Gems';
 import { Wildlife } from './Wildlife';
 import { Landmarks } from './Landmarks';
-import { CameraRig, ClimberBeacon, Player } from './Player';
+import { CameraRig, Player } from './Player';
 import { FarTerrain, Terrain, Trail } from './Terrain';
 import { Ecology, Rocks, Shrubs, TrailMarkers, Trees, ShaderWarmup, WindSway } from './Vegetation';
 
@@ -45,7 +45,6 @@ export function GameCanvas() {
       <Gems />
       <Wildlife />
       <Player />
-      <ClimberBeacon />
       <Spindrift />
       <CameraRig />
       <GameLoop />

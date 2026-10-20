@@ -512,8 +512,8 @@ function buildWorld(): World {
   W.gems = placeGems(W);
   W.boulders = [];
   scatterAll(W);
-  const sc = summitCairnSpot(W);
-  addCollider(W, sc.x, sc.z, 1.3);
+  // summit cairn (drawn in Landmarks, 1.8 m east of the benchmark) is solid
+  addCollider(W, W.summit.x + 1.8, W.summit.z, 1.0);
   return W;
 }
 
@@ -709,23 +709,6 @@ export function trailFieldDistance(x: number, z: number) {
 
 /** Corridor half-width in world units. */
 export const corridorUnits = () => CORRIDOR_MI / getWorld().miPerUnit;
-
-/**
- * Where the summit cairn stands (v0.10): 2.8 m from the summit benchmark, off to the side of the
- * final approach, so the climber can reach the benchmark without walking into the cairn.
- */
-export function summitCairnSpot(W: World) {
-  const m = W.main;
-  const n = m.pts.length;
-  let i = n - 1;
-  while (i > 0 && m.s[n - 1] - m.s[i] < 20) i--;
-  const dx = m.pts[n - 1].x - m.pts[i].x;
-  const dz = m.pts[n - 1].z - m.pts[i].z;
-  const l = Math.hypot(dx, dz) || 1;
-  const x = W.summit.x + (-dz / l) * 2.8;
-  const z = W.summit.z + (dx / l) * 2.8;
-  return { x, z };
-}
 
 function scatterAll(W: World) {
   placeScenery(W, CINDERCREST, { heightAt, gradientAt, trailQuery, snowCover, addCollider: (x, z, r) => addCollider(W, x, z, r) });

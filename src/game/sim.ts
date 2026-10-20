@@ -56,6 +56,8 @@ export const REST_TIME_MULT = 4;
 
 /** Width (units) of the slow-down band just inside the wilderness boundary (v0.8). */
 const CORRIDOR_SOFT = 30;
+/** Radius (units) around the summit benchmark the climber stays within until they finish (v0.10). */
+const SUMMIT_HOLD = 9;
 export const WALK_SPEED = 5.76; // v0.5: −10%
 export const JOG_SPEED = 11.16;
 export const JUMP_VELOCITY = 5.2;
@@ -369,6 +371,20 @@ export function stepPlayer(p: PlayerState, l: Loadout, intent: MoveIntent, dt: n
           p.boundaryWarn = p.realTime;
           emit({ type: 'toast', text: 'Wilderness boundary · head back toward the trail', tone: 'warn' });
         }
+      }
+    }
+    // Summit hold (v0.10): once within SUMMIT_HOLD of the benchmark, the climber can't walk
+    // back out past it until they finish the climb with the action button (the summit prompt).
+    const S = getWorld().summit;
+    const s0 = Math.hypot(p.x - S.x, p.z - S.z);
+    const s1 = Math.hypot(nx - S.x, nz - S.z);
+    if (s0 <= SUMMIT_HOLD + 0.5 && s1 > SUMMIT_HOLD) {
+      const k = SUMMIT_HOLD / s1;
+      nx = S.x + (nx - S.x) * k;
+      nz = S.z + (nz - S.z) * k;
+      if (p.realTime - p.boundaryWarn > 4) {
+        p.boundaryWarn = p.realTime;
+        emit({ type: 'toast', text: 'Summit · press the action button at the benchmark to finish', tone: 'warn' });
       }
     }
     // Hard limit of the map itself.

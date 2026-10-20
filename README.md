@@ -342,6 +342,20 @@ Bug fixes, budget and visual quality. Gem positions and the main route are uncha
 - **Roadmap notes.** `docs/roadmap-notes.md` lists what to move into data before more
   mountains and ranges.
 
+## v0.10 HUD, bug sweep and summit hold
+
+- **Desktop HUD.**
+  - Key hints can be hidden (remembered on this device). H toggles them, a Controls button
+    brings them back, and the pause menu has a toggle.
+  - `/` opens a quick actions menu: hints, map, recenter, pause.
+  - The bottom bar sits lower and is more compact.
+- **Summit.** The camera, cairn and flag are as in v0.9; the pull-back reveal was tried and
+  reverted. The summit cairn is solid. Once within 9 m of the benchmark, the climber can't
+  walk back out until they finish with the action button.
+- **Saved data.** Damaged records, high-score rows and register entries are skipped instead
+  of breaking the screens.
+- **Roadmap.** `docs/roadmap-notes.md` has a "Future iterations" section.
+
 ## Project layout
 
 ```
