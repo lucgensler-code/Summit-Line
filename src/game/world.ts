@@ -2,8 +2,10 @@
 // Coordinates: x = east, z = south, y = up. The summit crater sits at the origin and the
 // trailhead lies on the southern flank. One world unit ≈ 4.3 m when shown in the HUD.
 
-import { clamp, fbm, lerp, mulberry32, smoothstep } from './noise';
+import { clamp, fbm, lerp, smoothstep } from './noise';
 import { ACTIVE_MOUNTAIN, ACTIVE_ROUTE, type GemKind } from './routes';
+import { placeScenery } from './placement';
+import { CINDERCREST } from '../recipes';
 
 export const TERRAIN_SIZE = 1760;
 export const TERRAIN_SEGMENTS = 440;
@@ -358,6 +360,8 @@ export interface Scatter {
   s: number;
   rot: number;
   tint: number;
+  /** kit item id from the mountain's recipe (v0.7) */
+  item?: string;
 }
 
 export interface Checkpoint {
@@ -392,8 +396,10 @@ export interface World {
   drifts: Scatter[];
   ice: Scatter[];
   spires: Scatter[];
-  /** v0.6.1: occasional solid boulder groups off the trail (placed after gems, own RNG) */
+  /** v0.6.1 boulder groups — v0.7 places all rocks through the recipe, so this stays empty */
   boulders: Scatter[];
+  /** v0.7 ground cover (grass, flowers, shrubs, ferns), from the recipe */
+  cover: Scatter[];
   colliders: Map<number, { x: number; z: number; r: number }[]>;
   gems: Gem[];
 }
@@ -500,9 +506,11 @@ function buildWorld(): World {
     cp('summit', 'Cindercrest Summit', 'Traverse the crater rim to the true summit', mainLine.pts.length - 1, 5),
   ];
 
-  scatterAll(W);
+  // v0.7: gems first (fixed spots on the route), then the recipe dresses the mountain around them.
+  W.colliders = new Map();
   W.gems = placeGems(W);
-  placeBoulders(W);
+  W.boulders = [];
+  scatterAll(W);
   return W;
 }
 
@@ -653,135 +661,7 @@ export function collidersNear(x: number, z: number) {
 }
 
 function scatterAll(W: World) {
-  const rand = mulberry32(1337);
-  W.colliders = new Map();
-  W.trees = [];
-  W.rocks = [];
-  W.shrubs = [];
-  W.cairns = [];
-  W.posts = [];
-  W.logs = [];
-  W.ferns = [];
-  W.drifts = [];
-  W.ice = [];
-  W.spires = [];
-  const th = W.trailhead;
-  const clearOf = (x: number, z: number, d: number) => {
-    const hit = trailQuery(x, z, d + 1);
-    return !hit || hit.dist > d;
-  };
-  const nearLake = (x: number, z: number, pad: number) => Math.hypot(x - LAKE.x, z - LAKE.z) < LAKE.r + pad;
-  const nearTrailhead = (x: number, z: number) => Math.hypot(x - th.x, z - th.z) < 26;
-
-  // Trees: dense conifer forest below treeline, stunted whitebark pines above it.
-  let tries = 0;
-  while (W.trees.length < 7200 && tries < 90000) {
-    tries++;
-    const x = (rand() * 2 - 1) * (HALF - 20);
-    const z = (rand() * 2 - 1) * (HALF - 20);
-    const h = heightAt(x, z);
-    if (h < -0.5 && Math.max(Math.abs(x), Math.abs(z)) > HALF - 60) continue;
-    const dens = fbm(x / 90, z / 90, 3, 101);
-    const lim = TREELINE_H + dens * 14;
-    let p: number;
-    if (h < lim) p = 0.55 + dens * 0.6;
-    else if (h < lim + 45) p = 0.07 * (1 - (h - lim) / 45);
-    else p = 0;
-    if (rand() > p) continue;
-    if (!clearOf(x, z, 4.2) || nearLake(x, z, 4) || nearTrailhead(x, z)) continue;
-    const { gx, gz } = gradientAt(x, z);
-    if (Math.hypot(gx, gz) > 1.1) continue;
-    const alpine = h > lim;
-    const s = alpine ? 0.45 + rand() * 0.35 : 0.8 + rand() * 0.75;
-    W.trees.push({ x, z, y: h - 0.3, s, rot: rand() * Math.PI * 2, tint: rand() });
-    addCollider(W, x, z, 0.45 * s + 0.15);
-  }
-
-  // Boulders and rocks — denser on scree.
-  tries = 0;
-  while (W.rocks.length < 1700 && tries < 40000) {
-    tries++;
-    const r = Math.sqrt(rand()) * 820;
-    const a = rand() * Math.PI * 2;
-    const x = Math.sin(a) * r;
-    const z = Math.cos(a) * r;
-    const h = heightAt(x, z);
-    const p = h > 160 ? 0.9 : h > TREELINE_H ? 0.55 : 0.18;
-    if (rand() > p) continue;
-    if (!clearOf(x, z, 3.0) || nearLake(x, z, 1) || nearTrailhead(x, z)) continue;
-    const big = rand() < 0.16;
-    const s = big ? 1.6 + rand() * 2.4 : 0.3 + rand() * 0.9;
-    W.rocks.push({ x, z, y: h - s * 0.25, s, rot: rand() * Math.PI * 2, tint: rand() });
-    if (s > 1.2) addCollider(W, x, z, s * 0.8);
-  }
-
-  // Shrubs / heather / grass tufts.
-  tries = 0;
-  while (W.shrubs.length < 3200 && tries < 50000) {
-    tries++;
-    const x = (rand() * 2 - 1) * 760;
-    const z = (rand() * 2 - 1) * 760;
-    const h = heightAt(x, z);
-    if (h > 205) continue;
-    const p = h > TREELINE_H ? 0.8 : 0.35;
-    if (rand() > p || !clearOf(x, z, 2.2) || nearLake(x, z, 1)) continue;
-    W.shrubs.push({ x, z, y: h - 0.05, s: 0.35 + rand() * 0.6, rot: rand() * Math.PI * 2, tint: rand() });
-  }
-
-  // Ecological detail: fallen logs + ferns in the forest, wind-carved spires on the cone,
-  // snowdrifts on the upper slopes and ice formations around the crater.
-  const scatter = (count: number, tries: number, pick: () => { x: number; z: number }, ok: (x: number, z: number, h: number, slope: number) => boolean, push: (it: Scatter) => void, sMin: number, sMax: number) => {
-    let n = 0;
-    for (let t = 0; t < tries && n < count; t++) {
-      const { x, z } = pick();
-      const h = heightAt(x, z);
-      const { gx, gz } = gradientAt(x, z);
-      const slope = Math.hypot(gx, gz);
-      if (!ok(x, z, h, slope)) continue;
-      push({ x, z, y: h, s: sMin + rand() * (sMax - sMin), rot: rand() * Math.PI * 2, tint: rand() });
-      n++;
-    }
-  };
-  const square = () => ({ x: (rand() * 2 - 1) * (HALF - 30), z: (rand() * 2 - 1) * (HALF - 30) });
-  const polar = (r0: number, r1: number) => () => {
-    const r = r0 + rand() * (r1 - r0);
-    const a = rand() * Math.PI * 2;
-    return { x: Math.sin(a) * r, z: Math.cos(a) * r };
-  };
-  scatter(0, 0, square, (x, z, h, sl) => h < TREELINE_H - 8 && sl < 0.5 && clearOf(x, z, 5) && !nearTrailhead(x, z), (it) => W.logs.push(it), 0.7, 1.4);
-  scatter(1300, 12000, square, (x, z, h, sl) => h < TREELINE_H + 4 && sl < 0.8 && clearOf(x, z, 2.2) && !nearLake(x, z, 2), (it) => W.ferns.push(it), 0.45, 0.95);
-  scatter(12, 4000, polar(70, 330), (x, z, h, sl) => h > 175 && sl > 0.45 && sl < 1.2 && clearOf(x, z, 6), (it) => {
-    W.spires.push(it);
-    addCollider(W, it.x, it.z, 0.9 * it.s);
-  }, 1.2, 2.6);
-  // v0.5: snowdrift humps and crater ice removed — on steep snow they stuck out as flat, glitchy
-  // sheets. The snowfield reads cleanly without them.
-  scatter(0, 6000, polar(36, 230), (x, z, h, sl) => snowCover(x, z, h, sl) > 0.55 && clearOf(x, z, 3.5), (it) => W.drifts.push(it), 1.2, 3.4);
-  scatter(0, 3000, polar(RIM_R - 26, RIM_R + 22), (x, z, h, sl) => clearOf(x, z, 2.5) && sl < 1.6 && h > 300, (it) => W.ice.push(it), 0.6, 1.5);
-  // Far forest beyond the playable boundary softens the transition to the foothills.
-  scatter(2200, 12000, polar(BOUNDARY_R + 10, HALF * 1.38), (x, z, h) => Math.max(Math.abs(x), Math.abs(z)) < HALF - 6 && h < TREELINE_H, (it) => W.trees.push({ ...it, s: 0.9 + it.s * 0.5, y: it.y - 0.3 }), 0.4, 1.2);
-
-  // Trail furniture along the main line.
-  const main = W.main;
-  let lastMark = -999;
-  for (let i = 0; i < main.pts.length - 1; i++) {
-    const h = main.heights[i];
-    const gap = h > TREELINE_H ? 40 : 70;
-    if (main.s[i] - lastMark < gap || main.s[i] < 30) continue;
-    const a = main.pts[i];
-    const b = main.pts[i + 1];
-    const dx = b.x - a.x;
-    const dz = b.z - a.z;
-    const l = Math.hypot(dx, dz) || 1;
-    const side = (i % 2 ? 1 : -1) * (TRAIL_HALF_WIDTH + 1.4);
-    const x = a.x - (dz / l) * side;
-    const z = a.z + (dx / l) * side;
-    const item = { x, z, y: heightAt(x, z), s: 1, rot: Math.atan2(dx, dz), tint: rand() };
-    if (h > TREELINE_H) W.cairns.push(item);
-    else W.posts.push(item);
-    addCollider(W, x, z, 0.5);
-    lastMark = main.s[i];
-  }
+  placeScenery(W, CINDERCREST, { heightAt, gradientAt, trailQuery, snowCover, addCollider: (x, z, r) => addCollider(W, x, z, r) });
 }
 
 /** Remaining route distance (units) to the summit from a world position. */
@@ -802,41 +682,6 @@ export function remainingToSummit(x: number, z: number) {
 }
 
 /** Resolve the route's gem specs (trail fraction + sideways offset) into world positions. */
-/**
- * Occasional groups of large solid boulders in natural open spots (v0.6.1). Uses its own RNG and
- * runs after everything else, so every earlier placement — trees, rocks, gems — is unchanged.
- * Groups stay well off the trail, away from gems, checkpoints, the tarn and the trailhead.
- */
-function placeBoulders(W: World) {
-  W.boulders = [];
-  const rand = mulberry32(4242);
-  const th = W.main.pts[0];
-  let groups = 0;
-  for (let t = 0; t < 4000 && groups < 26; t++) {
-    const r = 90 + Math.sqrt(rand()) * 640;
-    const a = rand() * Math.PI * 2;
-    const cx = Math.sin(a) * r;
-    const cz = Math.cos(a) * r;
-    const h = heightAt(cx, cz);
-    const { gx, gz } = gradientAt(cx, cz);
-    if (Math.hypot(gx, gz) > 0.85 || h > 330) continue;
-    if (trailQuery(cx, cz, 12)) continue;
-    if (Math.hypot(cx - LAKE.x, cz - LAKE.z) < LAKE.r + 25 || Math.hypot(cx - th.x, cz - th.z) < 45) continue;
-    if (W.gems.some((g) => Math.hypot(g.x - cx, g.z - cz) < 16)) continue;
-    if (W.checkpoints.some((c) => Math.hypot(c.x - cx, c.z - cz) < 30)) continue;
-    groups++;
-    const n = 3 + Math.floor(rand() * 4);
-    for (let i = 0; i < n; i++) {
-      const s = i === 0 ? 2.4 + rand() * 1.6 : 1.1 + rand() * 1.5;
-      const x = cx + (rand() - 0.5) * 9;
-      const z = cz + (rand() - 0.5) * 9;
-      if (trailQuery(x, z, TRAIL_HALF_WIDTH + 4)) continue;
-      W.boulders.push({ x, z, y: heightAt(x, z) - s * 0.3, s, rot: rand() * Math.PI * 2, tint: rand() });
-      addCollider(W, x, z, s * 0.85);
-    }
-  }
-}
-
 function placeGems(W: World): Gem[] {
   const main = W.main;
   const indexAt = (frac: number) => {
@@ -868,6 +713,10 @@ function placeGems(W: World): Gem[] {
       // right-hand perpendicular of the travel direction
       x = main.pts[i].x - (dz / l) * g.side;
       z = main.pts[i].z + (dx / l) * g.side;
+    }
+    if (g.nudge) {
+      x += g.nudge[0];
+      z += g.nudge[1];
     }
     // Never bury a gem in a tree or boulder: push it clear of any collider.
     for (const c of collidersNear(x, z)) {

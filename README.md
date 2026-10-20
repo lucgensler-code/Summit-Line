@@ -241,11 +241,47 @@ now counts as rock underfoot.
 - **Bugs fixed.** Supply buttons have even padding at every width. Home-screen profile labels sit
   on their own dots, alternating above and below the line.
 
+## v0.7 scenery kit and recipes
+
+All scenery is code-built by our own kit and placed by a per-mountain recipe. Gameplay matches
+v0.6.1: gem positions are identical and ascent times are unchanged.
+
+- **Kit** (`src/kit/`). Generators with designer-friendly settings:
+  - `trees.ts`: tiered conifers, wind-shaped pines and dead snags
+  - `rocks.ts`: chiselled rocks with ledges, cracks, moss, lichen and snow caps, plus balanced
+    cairns
+  - `plants.ts`: grass, wildflowers (lupine, paintbrush, aster, beargrass), heather, huckleberry,
+    cushion plants and ferns
+  - `gems.ts`: crystal clusters on mossy stone
+  - `models.ts`: loads hand-made glTF models as kit items
+
+  `catalogue.ts` builds and caches any item by id, variant and detail level.
+- **Recipe** (`src/recipes/cindercrest.ts`). One readable file holds the whole mountain:
+  - the item catalogue: species and rock types with their settings, variant counts and detail
+    distances
+  - placement rules in feet: tree species by elevation band, groves and clearings, boulder
+    fields under cliffs, boulders at trail bends, talus, outcrops and cliff bands, ground cover in
+    drifts, and cairns on level ground
+
+  A new mountain is mostly a new recipe file.
+- **Placement** (`src/game/placement.ts`). Deterministic, and shared with the headless sim.
+- **Ground.** Per-pixel grain from a tileable noise texture, plus a broken, noise-thresholded
+  snow line instead of edges that follow the triangles.
+- **Sky.** Solid cumulus low and mid; wispy high clouds that fade out before the stars appear.
+  Distant peaks have snow caps with rock ribs.
+- **Light.** Lighter, softer tree shadows (lighter still up high). Highlight roll-off keeps
+  snow shaded on phones. The home screen keeps fog beyond the mountain, so portrait phones
+  are no longer hazy.
+- **Kit preview.** `npm run dev`, then open `/kit.html` to see every item, its variants and its
+  settings, plus a glTF export and reload round trip.
+
 ## Project layout
 
 ```
 src/game/    world gen, routes, sim, navigation, scoring, leaderboard, records, units, weather, input, store, audio
 src/scene/   R3F components: terrain, trail, vegetation, landmarks, sky/lighting, player, camera
+src/kit/     scenery kit: tree, rock, plant, cairn and gem generators; model loader; catalogue
+src/recipes/ per-mountain recipes (item settings + placement rules)
 src/ui/      prep, HUD + mini-map, map, register, leaderboard, log, pause, summit, touch gestures
 scripts/     simulate-ascent.ts (headless bots), playtest.mjs (Playwright smoke test)
 ```

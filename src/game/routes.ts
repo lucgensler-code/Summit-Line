@@ -16,6 +16,8 @@ export interface GemSpec {
    * means taking the steep cut-off. Value = fraction along that line.
    */
   cut?: number;
+  /** fine position adjustment in world units [x, z] (keeps v0.6 positions exact) */
+  nudge?: [number, number];
   /** why it is here — design note, shown nowhere */
   note: string;
 }
@@ -60,7 +62,7 @@ export const CINDERCREST: MountainDef = {
       gems: [
         { id: 'r-forest', kind: 'red', at: 0.055, side: 2.5, note: 'start of the long gentle forest traverse' },
         { id: 'g-forest', kind: 'green', at: 0.235, side: 0, cut: 0.5, note: 'short steep cut through the upper forest' },
-        { id: 'g-meadow', kind: 'green', at: 0.335, side: 0, cut: 0.5, note: 'cut across the meadow bend' },
+        { id: 'g-meadow', kind: 'green', at: 0.335, side: 0, cut: 0.5, nudge: [0.0977, 0.1731], note: 'cut across the meadow bend' },
         { id: 'r-meadow', kind: 'red', at: 0.355, side: -2.5, note: 'start of the flat meadow below the tarn' },
         { id: 'g-cone1', kind: 'green', at: 0.44, side: 0, cut: 0.5, note: 'first switchback cut-off on the cinder cone' },
         { id: 'g-cone2', kind: 'green', at: 0.5, side: 0, cut: 0.5, note: 'switchback cut-off above the bench' },

@@ -1,10 +1,12 @@
 import { useFrame } from '@react-three/fiber';
 import { useMemo, useRef } from 'react';
 import * as THREE from 'three';
-import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { runtime, useGame } from '../game/store';
 import { getWorld, type Gem } from '../game/world';
-import { boulderGeometry } from './Vegetation';
+import { gemBaseKitGeometry, gemKitGeometry } from '../kit/catalogue';
+import { CINDERCREST } from '../recipes';
+
+const TOUCH = typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches;
 
 const STYLE = {
   green: { color: '#22e07f', emissive: '#0aa552', glow: '#5dff9e', spark: new THREE.Color('#7dffb0') },
@@ -47,14 +49,15 @@ function starTexture() {
   return tex;
 }
 
-function GemItem({ gem, cluster, base, mats, glow, star, beamGeo }: { gem: Gem; cluster: THREE.BufferGeometry; base: THREE.BufferGeometry; mats: Record<string, THREE.Material>; glow: Record<string, THREE.SpriteMaterial>; star: THREE.SpriteMaterial; beamGeo: THREE.BufferGeometry }) {
+function GemItem({ gem, cluster, base, mats, glow, star, beamGeo }: { gem: Gem; cluster: Record<'green' | 'red', THREE.BufferGeometry>; base: THREE.BufferGeometry; mats: Record<string, THREE.Material>; glow: Record<string, THREE.SpriteMaterial>; star: THREE.SpriteMaterial; beamGeo: THREE.BufferGeometry }) {
   const group = useRef<THREE.Group>(null);
   const crystal = useRef<THREE.Mesh>(null);
   const sparkle = useRef<THREE.Sprite>(null);
   const halo = useRef<THREE.Sprite>(null);
+  const beam = useRef<THREE.Mesh>(null);
   const phase = useMemo(() => (gem.x * 13.1 + gem.z * 7.7) % 6.28, [gem]);
   const rot = useMemo(() => (gem.x * 3.7 + gem.z * 1.3) % 6.28, [gem]);
-  useFrame(({ clock }) => {
+  useFrame(({ clock, camera }) => {
     const gr = group.current;
     if (!gr) return;
     const p = runtime.player;
@@ -62,6 +65,12 @@ function GemItem({ gem, cluster, base, mats, glow, star, beamGeo }: { gem: Gem; 
     gr.visible = !collected && useGame.getState().phase !== 'prep';
     if (!gr.visible) return;
     const t = clock.elapsedTime + phase;
+    // The locator beam is for spotting gems from afar; it fades out up close.
+    if (beam.current) {
+      const d = camera.position.distanceTo(gr.position);
+      const near = CINDERCREST.placement.gems.beamHideNear;
+      beam.current.visible = d > near;
+    }
     // A slow breathing glow instead of bobbing — minerals don't float.
     if (crystal.current) crystal.current.scale.setScalar(1 + Math.sin(t * 1.6) * 0.03);
     // Soft pulsing halo, and a brief star-glint every few seconds.
@@ -76,11 +85,11 @@ function GemItem({ gem, cluster, base, mats, glow, star, beamGeo }: { gem: Gem; 
   });
   return (
     <group ref={group} position={[gem.x, gem.y, gem.z]} rotation={[0, rot, 0]}>
-      <mesh geometry={base} material={mats.base} position={[0, 0.05, 0]} castShadow receiveShadow />
-      <mesh ref={crystal} geometry={cluster} material={mats[gem.kind]} position={[0, 0.12, 0]} castShadow />
+      <mesh geometry={base} material={mats.base} position={[0, 0.05, 0]} scale={[0.5, 0.5, 0.46]} castShadow receiveShadow />
+      <mesh ref={crystal} geometry={cluster[gem.kind]} material={mats[gem.kind]} position={[0, 0.16, 0]} castShadow />
       <sprite ref={halo} material={glow[gem.kind]} position={[0, 0.5, 0]} scale={[1.7, 1.7, 1]} />
       <sprite ref={sparkle} material={star} position={[0.08, 0.86, 0.05]} visible={false} />
-      <mesh geometry={beamGeo} material={mats[`${gem.kind}Beam`]} position={[0, 9, 0]} />
+      <mesh ref={beam} geometry={beamGeo} material={mats[`${gem.kind}Beam`]} position={[0, 9, 0]} scale={TOUCH ? [0.45, 1, 0.45] : [1, 1, 1]} />
     </group>
   );
 }
@@ -91,30 +100,13 @@ const POOL = 260;
 export function Gems() {
   const W = getWorld();
   const { cluster, base, mats, glow, star, beamGeo } = useMemo(() => {
-    // Irregular crystal cluster: a few hexagonal prisms with pointed tips, leaning out of a rock.
-    const prisms: THREE.BufferGeometry[] = [];
-    const spec = [
-      [0, 0, 0.62, 0.11, 0],
-      [0.13, 0.05, 0.42, 0.08, 0.5],
-      [-0.12, 0.06, 0.38, 0.075, -0.55],
-      [0.02, -0.13, 0.33, 0.07, 0.35],
-      [-0.06, 0.14, 0.26, 0.06, -0.2],
-    ];
-    spec.forEach(([x, z, h, r, lean], i) => {
-      const body = new THREE.CylinderGeometry(r, r * 1.1, h, 6).translate(0, h / 2, 0);
-      const tip = new THREE.ConeGeometry(r, r * 2.2, 6).translate(0, h + r * 1.1, 0);
-      const g = mergeGeometries([body.toNonIndexed(), tip.toNonIndexed()], false)!;
-      g.rotateZ(lean * 0.6).rotateX(lean * 0.4 * (i % 2 ? 1 : -1)).translate(x, 0.04, z);
-      prisms.push(g);
-    });
-    const cluster = mergeGeometries(prisms, false)!;
-    cluster.computeVertexNormals();
-    // The crystals grow out of a rounded, weathered stone (same family as the scenery boulders).
-    const base = boulderGeometry(1, 97, 1.2).scale(0.42, 0.42, 0.38);
+    // Kit crystals (src/kit/gems.ts): clusters of varied crystals set into a mossy stone.
+    const cluster = { green: gemKitGeometry(CINDERCREST, 'green'), red: gemKitGeometry(CINDERCREST, 'red') };
+    const base = gemBaseKitGeometry();
     const tex = glowTexture();
     const beam = new THREE.CylinderGeometry(0.05, 0.16, 18, 6, 1, true);
     const mk = (k: 'green' | 'red') =>
-      new THREE.MeshStandardMaterial({ color: STYLE[k].color, emissive: STYLE[k].emissive, emissiveIntensity: 0.7, roughness: 0.22, metalness: 0.05, flatShading: true, transparent: true, opacity: 0.92 });
+      new THREE.MeshStandardMaterial({ vertexColors: true, emissive: STYLE[k].emissive, emissiveIntensity: 0.55, roughness: 0.25, metalness: 0.05, flatShading: true });
     const beamMat = (k: 'green' | 'red') =>
       new THREE.MeshBasicMaterial({ color: STYLE[k].glow, transparent: true, opacity: 0.035, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: true });
     const sprite = (k: 'green' | 'red') =>
@@ -127,7 +119,7 @@ export function Gems() {
         red: mk('red'),
         greenBeam: beamMat('green'),
         redBeam: beamMat('red'),
-        base: new THREE.MeshLambertMaterial({ vertexColors: true, color: '#8a8078' }),
+        base: new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true }),
       } as Record<string, THREE.Material>,
       glow: { green: sprite('green'), red: sprite('red') },
       star: new THREE.SpriteMaterial({ map: starTexture(), color: '#ffffff', transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0.95 }),

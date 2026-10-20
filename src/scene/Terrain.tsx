@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import * as THREE from 'three';
-import { fbm, smoothstep } from '../game/noise';
+import { fbm, mulberry32, smoothstep } from '../game/noise';
 import { STYLE } from './style';
 import {
   GRID_STEP,
@@ -38,9 +38,19 @@ const PAL = {
 };
 
 const tmp = new THREE.Color();
-const tmp2 = new THREE.Color();
 
+/**
+ * Ground colour and snow colour separately, plus how snowy the spot is (0–1). The terrain mesh
+ * blends them per pixel with a noise mask so the snow line is broken and natural; everything
+ * else uses `terrainColor`, which blends them per vertex.
+ */
 export function terrainColor(x: number, z: number, h: number, slope: number, out: THREE.Color) {
+  const k = terrainColorParts(x, z, h, slope, out, tmpSnow);
+  return out.lerp(tmpSnow, k);
+}
+const tmpSnow = new THREE.Color();
+
+export function terrainColorParts(x: number, z: number, h: number, slope: number, out: THREE.Color, snowOut: THREE.Color) {
   const n1 = fbm(x / 38, z / 38, 3, 201) * 0.5 + 0.5;
   const n2 = fbm(x / 9, z / 9, 2, 211) * 0.5 + 0.5;
 
@@ -74,13 +84,15 @@ export function terrainColor(x: number, z: number, h: number, slope: number, out
   }
   // Snow: off-white, cooler on steep faces and in broad wind-scoured bands; a little cinder shows
   // through only at the ragged edge of the snowfield (gameplay snow coverage is unchanged).
-  tmp2.copy(PAL.snow).lerp(PAL.snowShade, n2 * 0.3 + smoothstep(0.45, 1.05, slope) * 0.55 + smoothstep(0.55, 0.8, n1) * 0.2);
-  out.lerp(tmp2, smoothstep(0.3, 0.68, snow + (n1 - 0.5) * 0.12));
+  snowOut.copy(PAL.snow).lerp(PAL.snowShade, n2 * 0.3 + smoothstep(0.45, 1.05, slope) * 0.55 + smoothstep(0.55, 0.8, n1) * 0.2);
+  const snowK = smoothstep(0.3, 0.68, snow + (n1 - 0.5) * 0.12);
   // Distant plain
   out.lerp(PAL.plain, smoothstep(HALF - 120, HALF - 10, Math.max(Math.abs(x), Math.abs(z))) * 0.7);
   // Subtle brightness variation
-  out.multiplyScalar(0.92 + n2 * 0.16);
-  return out;
+  const b = 0.92 + n2 * 0.16;
+  out.multiplyScalar(b);
+  snowOut.multiplyScalar(0.97 + n2 * 0.06);
+  return snowK;
 }
 
 export function Terrain() {
@@ -89,7 +101,10 @@ export function Terrain() {
     const N1 = TERRAIN_SEGMENTS + 1;
     const pos = new Float32Array(N1 * N1 * 3);
     const col = new Float32Array(N1 * N1 * 3);
+    const snowCol = new Float32Array(N1 * N1 * 3);
+    const snowK = new Float32Array(N1 * N1);
     const c = new THREE.Color();
+    const sc = new THREE.Color();
     for (let iz = 0; iz < N1; iz++) {
       for (let ix = 0; ix < N1; ix++) {
         const i = iz * N1 + ix;
@@ -102,10 +117,13 @@ export function Terrain() {
         const hx = W.heights[iz * N1 + Math.min(ix + 1, N1 - 1)] - W.heights[iz * N1 + Math.max(ix - 1, 0)];
         const hz = W.heights[Math.min(iz + 1, N1 - 1) * N1 + ix] - W.heights[Math.max(iz - 1, 0) * N1 + ix];
         const slope = Math.hypot(hx, hz) / (2 * GRID_STEP);
-        terrainColor(x, z, h, slope, c);
+        snowK[i] = terrainColorParts(x, z, h, slope, c, sc);
         col[i * 3] = c.r;
         col[i * 3 + 1] = c.g;
         col[i * 3 + 2] = c.b;
+        snowCol[i * 3] = sc.r;
+        snowCol[i * 3 + 1] = sc.g;
+        snowCol[i * 3 + 2] = sc.b;
       }
     }
     const idx = new Uint32Array(TERRAIN_SEGMENTS * TERRAIN_SEGMENTS * 6);
@@ -146,27 +164,26 @@ export function Terrain() {
           const jz = iz + dz;
           if (jx < 0 || jz < 0 || jx >= N1 || jz >= N1) continue;
           const i = jz * N1 + jx;
+          // Fallen needles and shade under the canopy: darker and warmer.
           const f = dx === 0 && dz === 0 ? 0.86 : 0.94;
-          col[i * 3] *= f;
-          col[i * 3 + 1] *= f;
-          col[i * 3 + 2] *= f;
+          col[i * 3] = col[i * 3] * f * 0.85 + DUFF.r * 0.15;
+          col[i * 3 + 1] = col[i * 3 + 1] * f * 0.85 + DUFF.g * 0.15;
+          col[i * 3 + 2] = col[i * 3 + 2] * f * 0.85 + DUFF.b * 0.15;
         }
     }
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
     g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    g.setAttribute('aSnowCol', new THREE.BufferAttribute(snowCol, 3));
+    g.setAttribute('aSnow', new THREE.BufferAttribute(snowK, 1));
     g.setIndex(new THREE.BufferAttribute(idx, 1));
     g.computeVertexNormals();
     g.computeBoundingSphere();
     return g;
   }, []);
+  const material = useMemo(() => groundMaterial(), []);
 
-  return (
-    <mesh geometry={geometry} receiveShadow>
-      {/* Lambert: matte ground, and much cheaper per pixel than the standard material. */}
-      <meshLambertMaterial vertexColors />
-    </mesh>
-  );
+  return <mesh geometry={geometry} material={material} receiveShadow />;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -245,6 +262,91 @@ export function FarTerrain() {
       <meshStandardMaterial vertexColors roughness={1} side={THREE.DoubleSide} />
     </mesh>
   );
+}
+
+const DUFF = new THREE.Color('#6b5638');
+
+/**
+ * Tileable value-noise texture (R: broad mottling, G: fine grain) used for ground detail and the
+ * broken snow line. Generated once, 256², repeats seamlessly.
+ */
+function detailTexture() {
+  const N = 256;
+  const data = new Uint8Array(N * N * 4);
+  const lattice = (L: number, seed: number) => {
+    const r = mulberry32(seed);
+    const g = new Float32Array(L * L);
+    for (let i = 0; i < g.length; i++) g[i] = r();
+    return (u: number, v: number) => {
+      const x = u * L;
+      const y = v * L;
+      const x0 = Math.floor(x);
+      const y0 = Math.floor(y);
+      const fx = x - x0;
+      const fy = y - y0;
+      const sx = fx * fx * (3 - 2 * fx);
+      const sy = fy * fy * (3 - 2 * fy);
+      const at = (i: number, j: number) => g[((j % L) + L) % L * L + (((i % L) + L) % L)];
+      const a = at(x0, y0) + (at(x0 + 1, y0) - at(x0, y0)) * sx;
+      const b = at(x0, y0 + 1) + (at(x0 + 1, y0 + 1) - at(x0, y0 + 1)) * sx;
+      return a + (b - a) * sy;
+    };
+  };
+  const o1 = lattice(4, 11);
+  const o2 = lattice(8, 12);
+  const o3 = lattice(16, 13);
+  const f1 = lattice(32, 14);
+  const f2 = lattice(64, 15);
+  for (let y = 0; y < N; y++)
+    for (let x = 0; x < N; x++) {
+      const u = x / N;
+      const v = y / N;
+      const broad = o1(u, v) * 0.5 + o2(u, v) * 0.3 + o3(u, v) * 0.2;
+      const fine = f1(u, v) * 0.55 + f2(u, v) * 0.45;
+      const i = (y * N + x) * 4;
+      data[i] = Math.round(broad * 255);
+      data[i + 1] = Math.round(fine * 255);
+      data[i + 2] = 0;
+      data[i + 3] = 255;
+    }
+  const tex = new THREE.DataTexture(data, N, N);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.magFilter = THREE.LinearFilter;
+  tex.minFilter = THREE.LinearMipmapLinearFilter;
+  tex.generateMipmaps = true;
+  tex.needsUpdate = true;
+  return tex;
+}
+
+/**
+ * Ground material (v0.7): Lambert with two per-pixel touches — mottled grain so large triangles
+ * don't read as flat slabs up close, and snow that blends in through a noise threshold, giving a
+ * ragged, natural snow line with patches instead of edges that follow the triangles.
+ */
+function groundMaterial() {
+  const m = new THREE.MeshLambertMaterial({ vertexColors: true });
+  const tex = detailTexture();
+  m.onBeforeCompile = (sh) => {
+    sh.uniforms.tDetail = { value: tex };
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', '#include <common>\nattribute vec3 aSnowCol;\nattribute float aSnow;\nvarying vec3 vSnowCol;\nvarying float vSnow;\nvarying vec2 vXZ;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvSnowCol = aSnowCol;\nvSnow = aSnow;\nvXZ = position.xz;');
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', '#include <common>\nuniform sampler2D tDetail;\nvarying vec3 vSnowCol;\nvarying float vSnow;\nvarying vec2 vXZ;')
+      .replace(
+        '#include <color_fragment>',
+        `#include <color_fragment>
+        vec2 dA = texture2D(tDetail, vXZ / 37.0).rg;
+        vec2 dB = texture2D(tDetail, vXZ / 6.5).rg;
+        float grain = dB.g * 0.6 + dA.g * 0.4;
+        diffuseColor.rgb *= 0.86 + 0.28 * (dA.r * 0.55 + grain * 0.45);
+        float edge = vSnow + (dA.r - 0.5) * 0.65 + (dB.r - 0.5) * 0.3;
+        float mask = smoothstep(0.42, 0.56, edge);
+        vec3 snowC = vSnowCol * (0.9 + 0.12 * dB.g + 0.06 * dA.r);
+        diffuseColor.rgb = mix(diffuseColor.rgb, snowC, mask);`,
+      );
+  };
+  return m;
 }
 
 const FAR_FOREST = STYLE.farForest;

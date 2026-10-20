@@ -34,6 +34,10 @@ const GradeShader = {
     void main() {
       vec4 c = texture2D(tDiffuse, vUv);
       float l = dot(c.rgb, vec3(0.2126, 0.7152, 0.0722));
+      // Soft highlight roll-off so sunlit snow keeps its shading instead of clipping to white.
+      float k = l > 0.75 ? (0.75 + (l - 0.75) / (1.0 + (l - 0.75) * 1.6)) / l : 1.0;
+      c.rgb *= k;
+      l *= k;
       // saturation, gentle in the highlights
       vec3 col = mix(vec3(l), c.rgb, mix(uSat, 1.0, smoothstep(0.6, 1.6, l)));
       // split-tone: cool lift in the shadows, warm in the highlights
@@ -57,7 +61,7 @@ export function PostFX() {
     const target = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: 4 });
     const c = new EffectComposer(gl, target);
     c.addPass(new RenderPass(scene, camera));
-    c.addPass(new UnrealBloomPass(new THREE.Vector2(256, 256), 0.22, 0.55, 0.92));
+    c.addPass(new UnrealBloomPass(new THREE.Vector2(256, 256), 0.16, 0.5, 1.08));
     c.addPass(new ShaderPass(GradeShader));
     c.addPass(new OutputPass());
     return c;

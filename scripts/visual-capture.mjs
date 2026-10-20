@@ -41,6 +41,8 @@ const at = (frac, hour, dist, pitch, yawOff) => `(() => {
 })()`;
 await view('1-forest', at(0.12, 9, 9, 0.22, 0));
 await view('2-upper', at(0.8, 11, 10, 0.28, 0.35));
+await view('2b-meadow', at(0.38, 10, 8, 0.2, 0));
+await view('2c-cinder', at(0.6, 11, 9, 0.22, 0.3));
 await view('3-approach', at(0.985, 12, 8, 0.15, 0));
 for (const [k, yaw] of [['N', 0], ['E', Math.PI / 2], ['S', Math.PI], ['W', -Math.PI / 2]]) {
   await view(`4-summit-${k}`, `(() => { const s = window.__summit; const W = s.getWorld(); const p = s.runtime.player; const l = s.runtime.loadout;
@@ -57,4 +59,16 @@ await view('6-gem', `(() => { const s = window.__summit; const W = s.getWorld();
 await view('7-sunrise-east', at(0.42, 6.35, 12, 0.12, 0).replace('s.runtime.cam.yaw = p.heading + Math.PI + 0', 's.runtime.cam.yaw = -Math.PI / 2'));
 await view('8-sunset-west', at(0.6, 18.75, 12, 0.12, 0).replace('s.runtime.cam.yaw = p.heading + Math.PI + 0', 's.runtime.cam.yaw = Math.PI / 2'));
 console.log(JSON.stringify({ label, stats, errs }, null, 1));
+// Phone home screen (portrait).
+try {
+  const ctx = await browser.newContext({ viewport: { width: 393, height: 852 }, hasTouch: true, isMobile: true, deviceScaleFactor: 1 });
+  const ph = await ctx.newPage();
+  await ph.goto(process.env.CAPTURE_URL || 'http://localhost:5173/');
+  await ph.waitForSelector('.start-btn', { timeout: 120000 });
+  await ph.waitForTimeout(4000);
+  await ph.screenshot({ path: `${out}/${label}-9-phone-home.png`, timeout: 240000 });
+  await ctx.close();
+} catch (e) {
+  console.error('phone home capture failed:', e.message);
+}
 await browser.close();

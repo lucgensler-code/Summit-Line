@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Summit Line Kit</title>
+    <style>
+      html, body { margin: 0; background: #1b2028; color: #eef0f3; font: 13px system-ui, sans-serif; }
+      #grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 10px; padding: 12px; }
+      .cell { background: #252b35; border-radius: 10px; overflow: hidden; }
+      .cell canvas { display: block; width: 100%; height: 200px; }
+      .cell b { display: block; padding: 6px 10px 0; font-size: 13px; }
+      .cell pre { margin: 0; padding: 4px 10px 8px; font-size: 10px; color: #aab3bf; white-space: pre-wrap; max-height: 90px; overflow: auto; }
+      h1 { margin: 12px 12px 0; font-size: 18px; }
+      p { margin: 4px 12px; color: #aab3bf; }
+    </style>
+  </head>
+  <body>
+    <h1>Summit Line scenery kit</h1>
+    <p>Every item in the Cindercrest recipe, three variants each, with its settings. Internal design review page (not shipped with the game).</p>
+    <div id="grid"></div>
+    <script type="module" src="/src/kit/preview.ts"></script>
+  </body>
+</html>

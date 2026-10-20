@@ -22,7 +22,7 @@ export const STYLE = {
   cinderDark: C('#5e4038'),
   pumice: C('#a39183'),
   basalt: C('#4d4545'),
-  snow: C('#e4e8ef'),
+  snow: C('#dfe3eb'),
   snowShade: C('#a9b3d2'),
   // Rocks and markers
   rockWarm: C('#8b7f78'),

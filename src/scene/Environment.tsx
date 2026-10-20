@@ -242,6 +242,8 @@ function SkyDome() {
 
 // ---------------------------------------------------------------------------------------------
 
+const elevBoostOf = (p: { y: number } | null) => (p ? smoothstep(7000, 10000, elevationFt(p.y)) : 0.3);
+
 export function Atmosphere() {
   const { scene } = useThree();
   const sun = useRef<THREE.DirectionalLight>(null);
@@ -275,7 +277,9 @@ export function Atmosphere() {
     if (sun.current) {
       const s = sun.current;
       // Long, softer shadows when the sun is low; crisper at midday.
-      s.shadow.radius = 1.5 + 3 * (1 - smoothstep(0.1, 0.6, sunElevation(hour)));
+      s.shadow.radius = 2.5 + 3 * (1 - smoothstep(0.1, 0.6, sunElevation(hour)));
+      // Lighter shadows (v0.7): sky light fills them, more so in the bright air up high.
+      s.shadow.intensity = 0.72 - elevBoostOf(p) * 0.17;
       s.color.copy(pal.sun);
       s.intensity = pal.sunI;
       s.position.copy(focus).addScaledVector(dir, 160);
@@ -299,6 +303,13 @@ export function Atmosphere() {
     // melt into the same mist the ranges rise out of.
     fog.near = 120 + elevBoost * 140;
     fog.far = (1900 + elevBoost * 900) * pal.fog * (1 - afternoon * 0.2);
+    if (useGame.getState().phase === 'prep') {
+      // Home screen: the mountain is viewed from 1–1.3 km (further on portrait phones), so fog
+      // starts beyond it — the mountain stays crisp on every screen.
+      const d = camera.position.length();
+      fog.near = d * 0.9;
+      fog.far = d * 3.4;
+    }
     {
       const u = skyMaterial.uniforms;
       u.uTop.value.copy(pal.top);
@@ -389,7 +400,11 @@ function peakGeometry(radius: number, height: number, seed: number, jagged: numb
       const k = y / height;
       const a = Math.atan2(x, z);
       const n = fbm(Math.cos(a) * 3 + seed, k * 4, 3, seed + 3);
-      const snowAmt = smoothstep(snowLine - 0.05, snowLine + 0.05, k + n * 0.2);
+      // Snow cap with rock showing through: ragged lower edge, dark rock ribs running down the
+      // faces, and the steepest upper faces left bare.
+      const ribs = smoothstep(0.15, 0.45, Math.abs(Math.sin(a * (5 + (seed % 4)) + n * 3)) - 0.35 + (1 - k) * 0.4);
+      let snowAmt = smoothstep(snowLine - 0.04, snowLine + 0.06, k + n * 0.22);
+      snowAmt *= 1 - ribs * 0.75 * smoothstep(1.0, 0.75, k);
       out.copy(STYLE.farForest).lerp(STYLE.farRock, smoothstep(0.12, 0.35, k)).lerp(STYLE.farSnow, snowAmt);
     },
     (y) => baseHaze + (1 - baseHaze) * smoothstep(height * 0.32, 0, y) * 0.75,
@@ -450,9 +465,9 @@ const RINGS = [
 
 /** Secondary snow peaks spread around the compass (the reveal range is separate, below). */
 const PEAKS: { x: number; z: number; r: number; h: number; jag: number; snow: number; seed: number; haze: number }[] = [
-  { x: 3300, z: 600, r: 1100, h: 560, jag: 0.6, snow: 0.55, seed: 11, haze: 0.5 }, // east
+  { x: 3300, z: 600, r: 1100, h: 560, jag: 0.6, snow: 0.7, seed: 11, haze: 0.5 }, // east
   { x: 1900, z: 3400, r: 1200, h: 620, jag: 0.35, snow: 0.5, seed: 19, haze: 0.52 }, // south-east volcano
-  { x: -1800, z: 3700, r: 1250, h: 540, jag: 0.7, snow: 0.55, seed: 23, haze: 0.56 }, // south-west
+  { x: -1800, z: 3700, r: 1250, h: 540, jag: 0.7, snow: 0.72, seed: 23, haze: 0.56 }, // south-west
   { x: 900, z: -4300, r: 1300, h: 600, jag: 0.8, snow: 0.5, seed: 37, haze: 0.6 }, // north
 ];
 
@@ -464,9 +479,9 @@ const PEAKS: { x: number; z: number; r: number; h: number; jag: number; snow: nu
 const REVEAL: { ahead: number; lateral: number; r: number; h: number; jag: number; snow: number; seed: number; haze: number }[] = [
   // Laid out along the final approach to the summit (v0.5.1), so they rise on the horizon directly
   // behind the summit marker: `ahead` = distance past the summit, `lateral` = + right / − left.
-  { ahead: 2550, lateral: 0, r: 1000, h: 900, jag: 0.9, snow: 0.42, seed: 53, haze: 0.16 }, // the next mountain
+  { ahead: 2550, lateral: 0, r: 1000, h: 900, jag: 0.9, snow: 0.52, seed: 53, haze: 0.16 }, // the next mountain
   { ahead: 3300, lateral: -1450, r: 1250, h: 1050, jag: 0.7, snow: 0.45, seed: 61, haze: 0.32 },
-  { ahead: 3800, lateral: 1550, r: 1300, h: 930, jag: 1.0, snow: 0.48, seed: 67, haze: 0.42 },
+  { ahead: 3800, lateral: 1550, r: 1300, h: 930, jag: 1.0, snow: 0.62, seed: 67, haze: 0.42 },
   { ahead: 4700, lateral: -350, r: 1500, h: 1150, jag: 0.6, snow: 0.5, seed: 71, haze: 0.52 },
 ];
 
@@ -649,26 +664,73 @@ function cloudLayer(count: number, seed: number, rMin: number, rMax: number, yMi
   return mergeGeometries(parts, false)!;
 }
 
+/** Soft wind-stretched wisps for the high layer (one shared canvas texture). */
+function wispTexture() {
+  const cv = document.createElement('canvas');
+  cv.width = 256;
+  cv.height = 64;
+  const ctx = cv.getContext('2d')!;
+  const rand = mulberry32(17);
+  for (let i = 0; i < 14; i++) {
+    const x = 30 + rand() * 196;
+    const y = 26 + (rand() - 0.5) * 14;
+    const rx = 26 + rand() * 40;
+    const ry = 8 + rand() * 9;
+    const g = ctx.createRadialGradient(x, y, 0, x, y, rx);
+    g.addColorStop(0, 'rgba(255,255,255,0.42)');
+    g.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.scale(1, ry / rx);
+    ctx.translate(-x, -y);
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, 256, 64);
+    ctx.restore();
+  }
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+/**
+ * Two cloud styles (v0.7): solid, softly shaded cumulus low and mid (you climb past them), and
+ * light wind-stretched wisps high up. Wisps are see-through, so they fade out as the stars come
+ * out — stars never show through any cloud.
+ */
 export function Clouds() {
-  const high = useRef<THREE.Mesh>(null);
-  const { mid, top, mat } = useMemo(
-    () => ({
+  const high = useRef<THREE.Group>(null);
+  const { mid, mat, wisp, wisps } = useMemo(() => {
+    const rand = mulberry32(99);
+    return {
       mid: cloudLayer(9, 41, 300, 760, 150, 330, 26, 2),
-      top: cloudLayer(16, 99, 1000, 2900, 470, 700, 70, 1),
       mat: new THREE.MeshLambertMaterial({ vertexColors: true, emissive: new THREE.Color('#ffffff') }),
-    }),
-    [],
-  );
+      wisp: new THREE.SpriteMaterial({ map: wispTexture(), transparent: true, depthWrite: false, fog: false }),
+      wisps: Array.from({ length: 14 }, () => {
+        const a = rand() * Math.PI * 2;
+        const r = 1100 + rand() * 1900;
+        return { x: Math.cos(a) * r, z: Math.sin(a) * r, y: 520 + rand() * 260, w: 420 + rand() * 520 };
+      }),
+    };
+  }, []);
   useFrame((_, dt) => {
     if (high.current) high.current.rotation.y += dt * 0.0025;
-    // A little self-light so cloud undersides stay soft rather than grey; tinted by the hour.
-    const pal = samplePalette(currentHour());
-    mat.emissive.copy(pal.horizon).lerp(HAZE, 0.5).multiplyScalar(0.18 + daylight(currentHour()) * 0.12);
+    const hour = currentHour();
+    const pal = samplePalette(hour);
+    const light = daylight(hour);
+    mat.emissive.copy(pal.horizon).lerp(HAZE, 0.5).multiplyScalar(0.18 + light * 0.12);
+    wisp.color.copy(pal.sun).lerp(HAZE, 0.35).multiplyScalar(0.55 + light * 0.5);
+    const stars = 1 - smoothstep(0, 0.35, light);
+    wisp.opacity = (0.55 + light * 0.35) * (1 - smoothstep(0.02, 0.3, stars));
+    if (high.current) high.current.visible = wisp.opacity > 0.01;
   });
   return (
     <group>
       <mesh geometry={mid} material={mat} />
-      <mesh ref={high} geometry={top} material={mat} />
+      <group ref={high}>
+        {wisps.map((c, i) => (
+          <sprite key={i} material={wisp} position={[c.x, c.y, c.z]} scale={[c.w, c.w * 0.22, 1]} />
+        ))}
+      </group>
     </group>
   );
 }
