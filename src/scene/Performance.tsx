@@ -3,6 +3,19 @@ import { useEffect, useRef } from 'react';
 import type * as THREE from 'three';
 import { useGame } from '../game/store';
 
+/**
+ * Optional visual layers the governor can switch off on slower devices (v0.6.1), in order:
+ * the glow/colour-grade pass first, then valley mist (with lower resolution), then shadow detail.
+ */
+export const quality = { post: true, mist: true };
+/** `?hq` pins full quality (for testing a fast device); `?lq` starts at the lowest tier. */
+const qParams = typeof location !== 'undefined' ? new URLSearchParams(location.search) : null;
+const PIN_HQ = !!qParams?.has('hq');
+if (qParams?.has('lq')) {
+  quality.post = false;
+  quality.mist = false;
+}
+
 /** Live numbers for the optional FPS overlay (F3 or ?fps). Written by the governor, read by the DOM. */
 export const perfStats = { fps: 0, p95: 0, calls: 0, tris: 0, dpr: 1, tier: 0 };
 
@@ -51,11 +64,15 @@ export function PerfGovernor() {
     perfStats.calls = gl.info.render.calls;
     perfStats.tris = gl.info.render.triangles;
     perfStats.tier = tier.current;
-    if (now < grace.current || document.hidden) return;
-    if (perfStats.fps < 48 && tier.current < 3) {
+    if (now < grace.current || document.hidden || PIN_HQ) return;
+    if (perfStats.fps < 48 && tier.current < 4) {
       tier.current++;
       grace.current = now + 4000;
-      if (tier.current <= 2) {
+      if (tier.current === 1 && quality.post) {
+        // Cheapest big win first: drop the full-screen glow / colour-grade pass.
+        quality.post = false;
+      } else if (tier.current <= 3) {
+        if (tier.current === 3) quality.mist = false;
         const dpr = Math.max(0.85, perfStats.dpr - 0.2);
         setDpr(dpr);
         perfStats.dpr = dpr;

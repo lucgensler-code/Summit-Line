@@ -205,6 +205,42 @@ Gameplay is unchanged from v0.5.2: same terrain, route, snow mechanics, scoring 
   ±6, and there are no new lights, shadow casters, textures or post-processing. See
   `scripts/visual-capture.mjs` for the matched capture.
 
+## v0.6.1 scenery fidelity pass
+
+Graphics and bug fixes only. Gameplay matches v0.5.2, except that exposed rock in the snowfield
+now counts as rock underfoot.
+
+- **Shapes.** Trees, rocks, bushes, ferns and cairns are rounded and smoothly shaded (Lambert),
+  with baked darkening toward the ground. Distance detail levels (`Chunked` `near` / `far` /
+  `hide`) keep triangle counts flat or lower.
+- **Trees.** Fuller fir and spruce tiers with drooping, uneven rims, plus independent
+  height, width and lean variation.
+- **Rocks.** Weathered boulders with broad flat faces and rounded edges; mossy tops in the forest.
+  26 boulder groups sit off the trail (`placeBoulders`, own RNG, placed after gems). They are
+  solid, and you can jump over low ones.
+- **Bushes and ferns.** Layered mounded bushes and arching fern fronds replace the flat green
+  slabs.
+- **Snow and rock.** `rockPatch()` breaks the upper snowfield with dark rock ribs and outcrops,
+  kept clear of the boot track. They are rock underfoot, and pacing is unchanged
+  (`npm run test:sim`).
+- **Trail.** The tread is cut slightly into the slope with darker edges, low soil berms and
+  occasional edge stones. Width, route and grounding are unchanged.
+- **Ground.** Baked curvature shading (ridges lighter, hollows darker) and darker floor under
+  the canopy.
+- **Gems.** Crystals grow from a rounded stone, with a stronger soft halo and an occasional
+  star glint.
+- **Clouds.** Solid, softly shaded cumulus at mid heights beside the mountain and high far out.
+  Stars can't shine through them.
+- **Sun.** The disc rises due east and sets due west (matching the compass and minimap), with a
+  warm horizon glow. Shadows are longer and softer when the sun is low.
+- **Atmosphere.** See-through valley mist layers between the far ridges.
+- **Glow and colour grade** (`PostFX.tsx`, three's own bloom pass). The performance governor
+  drops it first on slower devices, then the valley mist, then resolution and shadow detail.
+  `?hq` pins full quality and `?lq` starts at the lowest tier.
+- **Camera.** Each climb starts a little lower and further back, with a wider lens.
+- **Bugs fixed.** Supply buttons have even padding at every width. Home-screen profile labels sit
+  on their own dots, alternating above and below the line.
+
 ## Project layout
 
 ```

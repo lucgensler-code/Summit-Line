@@ -7,7 +7,7 @@ const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PAT
 const page = await browser.newPage({ viewport: { width: 1280, height: 720 }, deviceScaleFactor: 1 });
 const errs = [];
 page.on('pageerror', (e) => errs.push(e.message));
-await page.goto('http://localhost:5173/');
+await page.goto(process.env.CAPTURE_URL || 'http://localhost:5173/');
 await page.waitForSelector('.start-btn', { timeout: 90000 });
 await page.waitForTimeout(2500);
 await page.screenshot({ path: `${out}/${label}-0-home.png` });
@@ -49,5 +49,12 @@ for (const [k, yaw] of [['N', 0], ['E', Math.PI / 2], ['S', Math.PI], ['W', -Mat
 }
 await view('5-midday-summit', `(() => { const s = window.__summit; const W = s.getWorld(); const p = s.runtime.player; const l = s.runtime.loadout;
   p.x = W.summit.x + 3; p.z = W.summit.z + 3; p.gameTime = (12.5 - l.departureHour) * 3600; s.runtime.cam.yaw = 2.2; s.runtime.cam.pitch = 0.25; s.runtime.cam.dist = 30; })()`);
+// Trail close-up with a gem, and sunrise (looking east) / sunset (looking west) from the meadows.
+await view('6-gem', `(() => { const s = window.__summit; const W = s.getWorld(); const p = s.runtime.player; const l = s.runtime.loadout;
+  const g = W.gems.find((x) => x.id === 'r-forest') || W.gems[0]; p.x = g.x + 2.5; p.z = g.z + 2.5; p.vx = p.vz = 0;
+  p.heading = Math.atan2(g.x - p.x, g.z - p.z); p.gameTime = (9.5 - l.departureHour) * 3600;
+  s.runtime.cam.yaw = p.heading + Math.PI; s.runtime.cam.pitch = 0.18; s.runtime.cam.dist = 5.5; })()`);
+await view('7-sunrise-east', at(0.42, 6.35, 12, 0.12, 0).replace('s.runtime.cam.yaw = p.heading + Math.PI + 0', 's.runtime.cam.yaw = -Math.PI / 2'));
+await view('8-sunset-west', at(0.6, 18.75, 12, 0.12, 0).replace('s.runtime.cam.yaw = p.heading + Math.PI + 0', 's.runtime.cam.yaw = Math.PI / 2'));
 console.log(JSON.stringify({ label, stats, errs }, null, 1));
 await browser.close();

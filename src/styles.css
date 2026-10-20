@@ -2971,3 +2971,37 @@ textarea {
 .reg-done + .btn-continue {
   margin: 14px 0 6px;
 }
+
+/* ================================================================== v0.6.1 supply button padding */
+.vitals {
+  width: 318px;
+}
+.supply-btn {
+  gap: 6px;
+  padding: 0 8px;
+  justify-content: center;
+}
+.supply-btn > .ico,
+.supply-btn > kbd {
+  flex: none;
+}
+.supply-btn > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.supply-btn kbd {
+  margin: 0 0 0 1px;
+  padding: 2px 4px;
+  line-height: 1;
+}
+@media (max-width: 640px) {
+  .vitals {
+    width: auto;
+  }
+}
+@media (orientation: landscape) and (max-height: 520px) {
+  .vitals {
+    width: 252px;
+  }
+}

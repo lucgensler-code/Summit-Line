@@ -5,8 +5,10 @@ import { fbm, mulberry32, smoothstep } from '../game/noise';
 import { clockHour, daylight } from '../game/sim';
 import { summitCinematic } from '../game/cinematic';
 import { runtime, useGame } from '../game/store';
-import { elevationFt, getWorld } from '../game/world';
+import { HALF, elevationFt, farHeight, getWorld, heightAt } from '../game/world';
+import { mergeGeometries, mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { STYLE, hazeMaterial } from './style';
+import { quality } from './Performance';
 
 // ---------------------------------------------------------------------------------------------
 // Time-of-day palette.
@@ -94,7 +96,21 @@ const SUNV = new THREE.Vector3();
 export function sunElevation(hour: number) {
   hour = ((hour % 24) + 24) % 24;
   const t = (hour - 6) / 13;
-  return t >= 0 && t <= 1 ? Math.sin(Math.PI * t) * 1.05 : -0.3;
+  // Continuous through sunrise and sunset, so the disc slides below the horizon instead of popping.
+  return t >= -0.2 && t <= 1.2 ? Math.max(-0.3, Math.sin(Math.PI * t) * 1.05) : -0.3;
+}
+
+/**
+ * Where the sun disc is drawn: rises due east (+x), crosses the south, sets due west (−x) — the
+ * same frame as the compass and minimap (north = −z). Unlike the key light it is never blended
+ * toward the moon, so the disc sits on the true horizon point at sunrise and sunset.
+ */
+export function sunDiscDirection(hour: number, out: THREE.Vector3) {
+  hour = ((hour % 24) + 24) % 24;
+  const t = (hour - 6) / 13;
+  const az = Math.PI * THREE.MathUtils.clamp(t, -0.2, 1.2);
+  const elev = sunElevation(hour);
+  return out.set(Math.cos(az) * Math.cos(elev), Math.sin(elev), Math.sin(az) * Math.cos(elev)).normalize();
 }
 
 /** Key-light direction: the sun by day, cross-fading continuously to moonlight at night. */
@@ -167,6 +183,7 @@ uniform vec3 uSun;
 uniform vec3 uSunDir;
 uniform float uSunVis;
 uniform float uStars;
+uniform float uLow;
 varying vec3 vDir;
 float hash(vec3 p) { return fract(sin(dot(p, vec3(12.9898, 78.233, 37.719))) * 43758.5453); }
 void main() {
@@ -175,6 +192,11 @@ void main() {
   vec3 col = mix(uHorizon, uTop, pow(smoothstep(-0.02, 0.6, h), 0.7));
   float s = max(dot(d, uSunDir), 0.0);
   col += uSun * (pow(s, 900.0) * 3.0 + pow(s, 12.0) * 0.18 + pow(s, 3.0) * 0.08) * uSunVis;
+  // Sunrise / sunset: a broad warm glow along the horizon around the sun.
+  vec3 dh = normalize(vec3(d.x, 0.0, d.z));
+  vec3 sh = normalize(vec3(uSunDir.x, 0.0001, uSunDir.z));
+  float az = max(dot(dh, sh), 0.0);
+  col += uSun * pow(az, 5.0) * exp(-max(h, 0.0) * 7.0) * 0.55 * uLow * smoothstep(-0.25, 0.0, uSunDir.y);
   // horizon haze band
   col = mix(col, uHorizon * 1.05, smoothstep(0.12, 0.0, abs(h - 0.01)) * 0.35);
   // stars
@@ -201,6 +223,7 @@ const skyMaterial = new THREE.ShaderMaterial({
           uSunDir: { value: new THREE.Vector3(0, 1, 0) },
           uSunVis: { value: 1 },
     uStars: { value: 0 },
+    uLow: { value: 0 },
   },
 });
 
@@ -251,6 +274,8 @@ export function Atmosphere() {
     else focus.set(camera.position.x, 0, camera.position.z);
     if (sun.current) {
       const s = sun.current;
+      // Long, softer shadows when the sun is low; crisper at midday.
+      s.shadow.radius = 1.5 + 3 * (1 - smoothstep(0.1, 0.6, sunElevation(hour)));
       s.color.copy(pal.sun);
       s.intensity = pal.sunI;
       s.position.copy(focus).addScaledVector(dir, 160);
@@ -279,8 +304,9 @@ export function Atmosphere() {
       u.uTop.value.copy(pal.top);
       u.uHorizon.value.copy(pal.horizon);
       u.uSun.value.copy(pal.sun);
-      u.uSunDir.value.copy(dir);
-      u.uSunVis.value = smoothstep(-0.04, 0.05, sunElevation(hour));
+      sunDiscDirection(hour, u.uSunDir.value);
+      u.uSunVis.value = smoothstep(-0.06, 0.03, sunElevation(hour));
+      u.uLow.value = 1 - smoothstep(0.04, 0.4, sunElevation(hour));
       u.uStars.value = 1 - smoothstep(0, 0.35, light);
     }
   });
@@ -514,62 +540,135 @@ export function DistantLands() {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Clouds: a few soft, wind-stretched wisps (v0.6) instead of solid puffs. One shared canvas
-// texture, sprites at high altitude, tinted by the light of the hour.
+// Valley mist (v0.6.1): two soft, partly see-through layers lying in the valleys beyond the
+// playable map, between the ridgelines. Cheap unlit transparent rings; dropped on low quality.
 
-function cloudTexture() {
+function mistTexture() {
+  const n = 256;
   const cv = document.createElement('canvas');
-  cv.width = 256;
-  cv.height = 64;
+  cv.width = cv.height = n;
   const ctx = cv.getContext('2d')!;
-  const rand = mulberry32(17);
-  for (let i = 0; i < 14; i++) {
-    const x = 30 + rand() * 196;
-    const y = 26 + (rand() - 0.5) * 14;
-    const rx = 26 + rand() * 40;
-    const ry = 8 + rand() * 9;
-    const g = ctx.createRadialGradient(x, y, 0, x, y, rx);
-    g.addColorStop(0, 'rgba(255,255,255,0.42)');
-    g.addColorStop(1, 'rgba(255,255,255,0)');
-    ctx.save();
-    ctx.translate(x, y);
-    ctx.scale(1, ry / rx);
-    ctx.translate(-x, -y);
-    ctx.fillStyle = g;
-    ctx.fillRect(0, 0, 256, 64);
-    ctx.restore();
-  }
+  const img = ctx.createImageData(n, n);
+  for (let y = 0; y < n; y++)
+    for (let x = 0; x < n; x++) {
+      const u = (x / (n - 1)) * 2 - 1;
+      const v = (y / (n - 1)) * 2 - 1;
+      const r = Math.hypot(u, v); // 0 centre … 1 outer edge of the ring geometry
+      const inner = smoothstep(0.19, 0.3, r);
+      const outer = 1 - smoothstep(0.72, 1.0, r);
+      const patch = 0.55 + 0.45 * (fbm(u * 6, v * 6, 3, 515) * 0.5 + 0.5);
+      const a = inner * outer * patch;
+      const o = (y * n + x) * 4;
+      img.data[o] = img.data[o + 1] = img.data[o + 2] = 255;
+      img.data[o + 3] = Math.round(a * 255);
+    }
+  ctx.putImageData(img, 0, 0);
   const tex = new THREE.CanvasTexture(cv);
-  tex.colorSpace = THREE.SRGBColorSpace;
   return tex;
 }
 
-export function Clouds() {
-  const group = useRef<THREE.Group>(null);
-  const { mat, items } = useMemo(() => {
-    const rand = mulberry32(99);
-    const mat = new THREE.SpriteMaterial({ map: cloudTexture(), transparent: true, depthWrite: false, fog: false });
-    const items = Array.from({ length: 14 }, () => {
-      const a = rand() * Math.PI * 2;
-      const r = 1100 + rand() * 1900;
-      return { x: Math.cos(a) * r, z: Math.sin(a) * r, y: 480 + rand() * 280, w: 420 + rand() * 520 };
-    });
-    return { mat, items };
+export function ValleyMist() {
+  const ref = useRef<THREE.Group>(null);
+  const { geo, mats } = useMemo(() => {
+    const tex = mistTexture();
+    const geo = new THREE.RingGeometry(900, 5000, 96, 1).rotateX(-Math.PI / 2);
+    // Planar UVs across the ring's full square so the texture's radius matches the ring radius.
+    const pos = geo.attributes.position;
+    const uv = geo.attributes.uv;
+    for (let i = 0; i < pos.count; i++) uv.setXY(i, pos.getX(i) / 10000 + 0.5, pos.getZ(i) / 10000 + 0.5);
+    const mk = (o: number) => new THREE.MeshBasicMaterial({ color: '#ffffff', alphaMap: tex, transparent: true, opacity: o, depthWrite: false, fog: false });
+    return { geo, mats: [mk(0.55), mk(0.4)] };
   }, []);
-  useFrame((_, dt) => {
-    if (group.current) group.current.rotation.y += dt * 0.0025;
-    const hour = currentHour();
-    const pal = samplePalette(hour);
-    const light = daylight(hour);
-    // Sunlit white by day, peach at golden hour, dim lavender at night.
-    mat.color.copy(pal.sun).lerp(HAZE, 0.35).multiplyScalar(0.55 + light * 0.5);
-    mat.opacity = 0.55 + light * 0.35;
+  useFrame(() => {
+    if (ref.current) ref.current.visible = quality.mist;
+    const light = daylight(currentHour());
+    for (const m of mats) m.color.copy(HAZE).multiplyScalar(0.85 + light * 0.2);
   });
   return (
-    <group ref={group}>
-      {items.map((c, i) => (
-        <sprite key={i} material={mat} position={[c.x, c.y, c.z]} scale={[c.w, c.w * 0.22, 1]} />
-      ))}
+    <group ref={ref}>
+      <mesh geometry={geo} material={mats[0]} position={[0, 45, 0]} renderOrder={-1} />
+      <mesh geometry={geo} material={mats[1]} position={[0, 110, 0]} rotation={[0, 1.3, 0]} renderOrder={-1} />
+    </group>
+  );
+}
+
+// ---------------------------------------------------------------------------------------------
+// Clouds (v0.6.1): rounded, softly shaded cumulus built from overlapping smooth mounds — a mid
+// layer drifting beside the mountain at heights you climb past, and a high layer far out. They
+// are opaque (stars never show through) and take scene fog, so distant ones melt into the haze.
+// Each layer is a single merged mesh: two draw calls in total.
+
+function groundAt(x: number, z: number) {
+  return Math.max(Math.abs(x), Math.abs(z)) < HALF - 2 ? heightAt(x, z) : farHeight(x, z);
+}
+
+function cloudLayer(count: number, seed: number, rMin: number, rMax: number, yMin: number, yMax: number, size: number, detail: number) {
+  const rand = mulberry32(seed);
+  const parts: THREE.BufferGeometry[] = [];
+  let placed = 0;
+  for (let t = 0; t < count * 40 && placed < count; t++) {
+    const a = rand() * Math.PI * 2;
+    const r = rMin + rand() * (rMax - rMin);
+    const cx = Math.sin(a) * r;
+    const cz = Math.cos(a) * r;
+    const cy = yMin + rand() * (yMax - yMin);
+    const w = size * (0.7 + rand() * 0.7);
+    // Keep clear of the mountain: sample the ground under the whole cloud.
+    let clear = true;
+    for (const [ox, oz] of [[0, 0], [w * 1.6, 0], [-w * 1.6, 0], [0, w], [0, -w]])
+      if (groundAt(cx + ox, cz + oz) > cy - w * 0.9) clear = false;
+    if (!clear) continue;
+    placed++;
+    const blobs = 5 + Math.floor(rand() * 4);
+    for (let i = 0; i < blobs; i++) {
+      const br = w * (i === 0 ? 0.62 : 0.32 + rand() * 0.3);
+      const g = new THREE.IcosahedronGeometry(br, detail);
+      const ox = (rand() - 0.5) * w * 2.6;
+      const oz = (rand() - 0.5) * w * 1.2;
+      const oy = (rand() - 0.2) * w * 0.35;
+      g.scale(1.15, 0.55, 1).translate(cx + ox, cy + oy, cz + oz);
+      const welded = new THREE.BufferGeometry();
+      welded.setAttribute('position', g.attributes.position);
+      const m = mergeVertices(welded, 1e-3);
+      m.computeVertexNormals();
+      // Flattened, shaded base; bright, sunlit tops.
+      const pos = m.attributes.position;
+      const colr = new Float32Array(pos.count * 3);
+      for (let k = 0; k < pos.count; k++) {
+        const y = pos.getY(k);
+        if (y < cy - w * 0.12) pos.setY(k, cy - w * 0.12 - (cy - w * 0.12 - y) * 0.25);
+        const up = Math.min(1, Math.max(0, (pos.getY(k) - (cy - w * 0.2)) / (w * 0.8)));
+        const v = 0.74 + up * 0.26;
+        colr.set([v * 0.97, v * 0.97, v], k * 3);
+      }
+      m.setAttribute('color', new THREE.BufferAttribute(colr, 3));
+      m.computeVertexNormals();
+      parts.push(m);
+    }
+  }
+  return mergeGeometries(parts, false)!;
+}
+
+export function Clouds() {
+  const high = useRef<THREE.Mesh>(null);
+  const { mid, top, mat } = useMemo(
+    () => ({
+      mid: cloudLayer(9, 41, 300, 760, 150, 330, 26, 2),
+      top: cloudLayer(16, 99, 1000, 2900, 470, 700, 70, 1),
+      mat: new THREE.MeshLambertMaterial({ vertexColors: true, emissive: new THREE.Color('#ffffff') }),
+    }),
+    [],
+  );
+  useFrame((_, dt) => {
+    if (high.current) high.current.rotation.y += dt * 0.0025;
+    // A little self-light so cloud undersides stay soft rather than grey; tinted by the hour.
+    const pal = samplePalette(currentHour());
+    mat.emissive.copy(pal.horizon).lerp(HAZE, 0.5).multiplyScalar(0.18 + daylight(currentHour()) * 0.12);
+  });
+  return (
+    <group>
+      <mesh geometry={mid} material={mat} />
+      <mesh ref={high} geometry={top} material={mat} />
     </group>
   );
 }

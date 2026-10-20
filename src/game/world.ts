@@ -392,6 +392,8 @@ export interface World {
   drifts: Scatter[];
   ice: Scatter[];
   spires: Scatter[];
+  /** v0.6.1: occasional solid boulder groups off the trail (placed after gems, own RNG) */
+  boulders: Scatter[];
   colliders: Map<number, { x: number; z: number; r: number }[]>;
   gems: Gem[];
 }
@@ -500,6 +502,7 @@ function buildWorld(): World {
 
   scatterAll(W);
   W.gems = placeGems(W);
+  placeBoulders(W);
   return W;
 }
 
@@ -563,6 +566,26 @@ export function gradientAt(x: number, z: number, e = 1.2) {
   };
 }
 
+/**
+ * Exposed rock in the upper snowfield (v0.6.1), 0..1: wind-scoured ribs and outcrops breaking the
+ * snow like a real approach. Never on or near the trail (the boot track stays continuous) and not
+ * in the crater. Where it is > 0.5 the ground is rock underfoot.
+ */
+export function rockPatch(x: number, z: number, h: number) {
+  if (h < 236) return 0;
+  const r = Math.hypot(x, z);
+  if (r < RIM_R + 6) return 0;
+  const n = fbm(x / 26 + 3, z / 26 - 7, 3, 331);
+  const ribs = fbm(Math.atan2(x, z) * 9, r / 40, 2, 337); // radial ribs down the cone
+  let m = smoothstep(0.06, 0.22, n * 0.75 + ribs * 0.45) * smoothstep(232, 258, h);
+  if (m <= 0) return 0;
+  if (world) {
+    const t = trailQuery(x, z, 9);
+    if (t) m *= smoothstep(TRAIL_HALF_WIDTH + 1.2, TRAIL_HALF_WIDTH + 4, t.dist);
+  }
+  return m;
+}
+
 /** Snow cover 0..1 from elevation, slope and noise. */
 export function snowCover(x: number, z: number, h: number, slope: number) {
   const r = Math.hypot(x, z);
@@ -573,6 +596,7 @@ export function snowCover(x: number, z: number, h: number, slope: number) {
   s = Math.max(s, patch * 0.9);
   s *= 1 - smoothstep(1.2, 1.7, slope);
   if (r < RIM_R + 1) s = Math.max(s, 0.85);
+  s *= 1 - rockPatch(x, z, h) * 0.95;
   return clamp(s, 0, 1);
 }
 
@@ -587,7 +611,7 @@ export function surfaceAt(x: number, z: number): { surface: Surface; onTrail: bo
   if (Math.hypot(x - LAKE.x, z - LAKE.z) < LAKE.r - 2 && h < LAKE.level) surface = 'water';
   else if (onTrail) surface = 'trail';
   else if (snow > 0.5) surface = 'snow';
-  else if (slope > 1.15) surface = 'rock';
+  else if (slope > 1.15 || rockPatch(x, z, h) > 0.5) surface = 'rock';
   else if (h > 168) surface = 'scree';
   else if (h > TREELINE_H) surface = 'meadow';
   else surface = 'forest';
@@ -778,6 +802,41 @@ export function remainingToSummit(x: number, z: number) {
 }
 
 /** Resolve the route's gem specs (trail fraction + sideways offset) into world positions. */
+/**
+ * Occasional groups of large solid boulders in natural open spots (v0.6.1). Uses its own RNG and
+ * runs after everything else, so every earlier placement — trees, rocks, gems — is unchanged.
+ * Groups stay well off the trail, away from gems, checkpoints, the tarn and the trailhead.
+ */
+function placeBoulders(W: World) {
+  W.boulders = [];
+  const rand = mulberry32(4242);
+  const th = W.main.pts[0];
+  let groups = 0;
+  for (let t = 0; t < 4000 && groups < 26; t++) {
+    const r = 90 + Math.sqrt(rand()) * 640;
+    const a = rand() * Math.PI * 2;
+    const cx = Math.sin(a) * r;
+    const cz = Math.cos(a) * r;
+    const h = heightAt(cx, cz);
+    const { gx, gz } = gradientAt(cx, cz);
+    if (Math.hypot(gx, gz) > 0.85 || h > 330) continue;
+    if (trailQuery(cx, cz, 12)) continue;
+    if (Math.hypot(cx - LAKE.x, cz - LAKE.z) < LAKE.r + 25 || Math.hypot(cx - th.x, cz - th.z) < 45) continue;
+    if (W.gems.some((g) => Math.hypot(g.x - cx, g.z - cz) < 16)) continue;
+    if (W.checkpoints.some((c) => Math.hypot(c.x - cx, c.z - cz) < 30)) continue;
+    groups++;
+    const n = 3 + Math.floor(rand() * 4);
+    for (let i = 0; i < n; i++) {
+      const s = i === 0 ? 2.4 + rand() * 1.6 : 1.1 + rand() * 1.5;
+      const x = cx + (rand() - 0.5) * 9;
+      const z = cz + (rand() - 0.5) * 9;
+      if (trailQuery(x, z, TRAIL_HALF_WIDTH + 4)) continue;
+      W.boulders.push({ x, z, y: heightAt(x, z) - s * 0.3, s, rot: rand() * Math.PI * 2, tint: rand() });
+      addCollider(W, x, z, s * 0.85);
+    }
+  }
+}
+
 function placeGems(W: World): Gem[] {
   const main = W.main;
   const indexAt = (frac: number) => {

@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { runtime, useGame } from '../game/store';
 import { getWorld, type Gem } from '../game/world';
+import { boulderGeometry } from './Vegetation';
 
 const STYLE = {
   green: { color: '#22e07f', emissive: '#0aa552', glow: '#5dff9e', spark: new THREE.Color('#7dffb0') },
@@ -25,9 +26,32 @@ function glowTexture() {
   return tex;
 }
 
-function GemItem({ gem, cluster, base, mats, glow, beamGeo }: { gem: Gem; cluster: THREE.BufferGeometry; base: THREE.BufferGeometry; mats: Record<string, THREE.Material>; glow: Record<string, THREE.SpriteMaterial>; beamGeo: THREE.BufferGeometry }) {
+/** Four-point star for the occasional sparkle. */
+function starTexture() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 64;
+  const ctx = c.getContext('2d')!;
+  const g = ctx.createRadialGradient(32, 32, 0, 32, 32, 30);
+  g.addColorStop(0, 'rgba(255,255,255,1)');
+  g.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.moveTo(32, 2);
+  ctx.quadraticCurveTo(35, 29, 62, 32);
+  ctx.quadraticCurveTo(35, 35, 32, 62);
+  ctx.quadraticCurveTo(29, 35, 2, 32);
+  ctx.quadraticCurveTo(29, 29, 32, 2);
+  ctx.fill();
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+function GemItem({ gem, cluster, base, mats, glow, star, beamGeo }: { gem: Gem; cluster: THREE.BufferGeometry; base: THREE.BufferGeometry; mats: Record<string, THREE.Material>; glow: Record<string, THREE.SpriteMaterial>; star: THREE.SpriteMaterial; beamGeo: THREE.BufferGeometry }) {
   const group = useRef<THREE.Group>(null);
   const crystal = useRef<THREE.Mesh>(null);
+  const sparkle = useRef<THREE.Sprite>(null);
+  const halo = useRef<THREE.Sprite>(null);
   const phase = useMemo(() => (gem.x * 13.1 + gem.z * 7.7) % 6.28, [gem]);
   const rot = useMemo(() => (gem.x * 3.7 + gem.z * 1.3) % 6.28, [gem]);
   useFrame(({ clock }) => {
@@ -40,12 +64,22 @@ function GemItem({ gem, cluster, base, mats, glow, beamGeo }: { gem: Gem; cluste
     const t = clock.elapsedTime + phase;
     // A slow breathing glow instead of bobbing — minerals don't float.
     if (crystal.current) crystal.current.scale.setScalar(1 + Math.sin(t * 1.6) * 0.03);
+    // Soft pulsing halo, and a brief star-glint every few seconds.
+    if (halo.current) halo.current.scale.setScalar(1.7 + Math.sin(t * 1.6) * 0.15);
+    if (sparkle.current) {
+      const cyc = (t * 0.33) % 1;
+      const k = cyc < 0.12 ? Math.sin((cyc / 0.12) * Math.PI) : 0;
+      sparkle.current.visible = k > 0.01;
+      sparkle.current.scale.setScalar(0.25 + k * 0.85);
+      sparkle.current.material.rotation = t * 0.8;
+    }
   });
   return (
     <group ref={group} position={[gem.x, gem.y, gem.z]} rotation={[0, rot, 0]}>
-      <mesh geometry={base} material={mats.base} castShadow receiveShadow />
-      <mesh ref={crystal} geometry={cluster} material={mats[gem.kind]} castShadow />
-      <sprite material={glow[gem.kind]} position={[0, 0.45, 0]} scale={[1.15, 1.15, 1]} />
+      <mesh geometry={base} material={mats.base} position={[0, 0.05, 0]} castShadow receiveShadow />
+      <mesh ref={crystal} geometry={cluster} material={mats[gem.kind]} position={[0, 0.12, 0]} castShadow />
+      <sprite ref={halo} material={glow[gem.kind]} position={[0, 0.5, 0]} scale={[1.7, 1.7, 1]} />
+      <sprite ref={sparkle} material={star} position={[0.08, 0.86, 0.05]} visible={false} />
       <mesh geometry={beamGeo} material={mats[`${gem.kind}Beam`]} position={[0, 9, 0]} />
     </group>
   );
@@ -56,7 +90,7 @@ const POOL = 260;
 
 export function Gems() {
   const W = getWorld();
-  const { cluster, base, mats, glow, beamGeo } = useMemo(() => {
+  const { cluster, base, mats, glow, star, beamGeo } = useMemo(() => {
     // Irregular crystal cluster: a few hexagonal prisms with pointed tips, leaning out of a rock.
     const prisms: THREE.BufferGeometry[] = [];
     const spec = [
@@ -75,15 +109,16 @@ export function Gems() {
     });
     const cluster = mergeGeometries(prisms, false)!;
     cluster.computeVertexNormals();
-    const base = new THREE.DodecahedronGeometry(0.28, 0).scale(1.3, 0.45, 1.1);
+    // The crystals grow out of a rounded, weathered stone (same family as the scenery boulders).
+    const base = boulderGeometry(1, 97, 1.2).scale(0.42, 0.42, 0.38);
     const tex = glowTexture();
     const beam = new THREE.CylinderGeometry(0.05, 0.16, 18, 6, 1, true);
     const mk = (k: 'green' | 'red') =>
-      new THREE.MeshStandardMaterial({ color: STYLE[k].color, emissive: STYLE[k].emissive, emissiveIntensity: 0.55, roughness: 0.22, metalness: 0.05, flatShading: true, transparent: true, opacity: 0.92 });
+      new THREE.MeshStandardMaterial({ color: STYLE[k].color, emissive: STYLE[k].emissive, emissiveIntensity: 0.7, roughness: 0.22, metalness: 0.05, flatShading: true, transparent: true, opacity: 0.92 });
     const beamMat = (k: 'green' | 'red') =>
       new THREE.MeshBasicMaterial({ color: STYLE[k].glow, transparent: true, opacity: 0.035, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: true });
     const sprite = (k: 'green' | 'red') =>
-      new THREE.SpriteMaterial({ map: tex, color: STYLE[k].glow, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0.3 });
+      new THREE.SpriteMaterial({ map: tex, color: STYLE[k].glow, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0.42 });
     return {
       cluster,
       base,
@@ -92,9 +127,10 @@ export function Gems() {
         red: mk('red'),
         greenBeam: beamMat('green'),
         redBeam: beamMat('red'),
-        base: new THREE.MeshStandardMaterial({ color: '#4a4240', flatShading: true, roughness: 1 }),
+        base: new THREE.MeshLambertMaterial({ vertexColors: true, color: '#8a8078' }),
       } as Record<string, THREE.Material>,
       glow: { green: sprite('green'), red: sprite('red') },
+      star: new THREE.SpriteMaterial({ map: starTexture(), color: '#ffffff', transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0.95 }),
       beamGeo: beam,
     };
   }, []);
@@ -203,7 +239,7 @@ export function Gems() {
   return (
     <group>
       {W.gems.map((g) => (
-        <GemItem key={g.id} gem={g} cluster={cluster} base={base} mats={mats} glow={glow} beamGeo={beamGeo} />
+        <GemItem key={g.id} gem={g} cluster={cluster} base={base} mats={mats} glow={glow} star={star} beamGeo={beamGeo} />
       ))}
       <points geometry={sparkGeo} frustumCulled={false}>
         <pointsMaterial size={0.09} vertexColors transparent opacity={0.8} blending={THREE.AdditiveBlending} depthWrite={false} />

@@ -1,6 +1,7 @@
 import { Canvas } from '@react-three/fiber';
 import * as THREE from 'three';
-import { Atmosphere, Clouds, DistantLands, Spindrift } from './Environment';
+import { Atmosphere, Clouds, DistantLands, Spindrift, ValleyMist } from './Environment';
+import { PostFX } from './PostFX';
 import { GameLoop } from './GameLoop';
 import { PerfGovernor, PrepMode } from './Performance';
 import { Gems } from './Gems';
@@ -16,7 +17,7 @@ export function GameCanvas() {
       shadows={{ type: THREE.PCFShadowMap }}
       dpr={1}
       gl={{ antialias: true, powerPreference: 'high-performance' }}
-      camera={{ fov: 55, near: 0.2, far: 9000, position: [600, 300, 600] }}
+      camera={{ fov: 60, near: 0.2, far: 9000, position: [600, 300, 600] }}
       onCreated={({ gl }) => {
         gl.toneMapping = THREE.ACESFilmicToneMapping;
         gl.toneMappingExposure = 1.02; // v0.6: a touch lower so snow keeps its shading
@@ -28,6 +29,7 @@ export function GameCanvas() {
       <Atmosphere />
       <DistantLands />
       <Clouds />
+      <ValleyMist />
       <Terrain />
       <FarTerrain />
       <Trail />
@@ -43,6 +45,7 @@ export function GameCanvas() {
       <Spindrift />
       <CameraRig />
       <GameLoop />
+      <PostFX />
     </Canvas>
   );
 }

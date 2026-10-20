@@ -205,8 +205,10 @@ function resetRun(loadout: Loadout) {
   runtime.readSigns = new Set();
   runtime.fx.length = 0;
   runtime.cam.yaw = p.heading + Math.PI;
-  runtime.cam.pitch = 0.3;
-  runtime.cam.dist = CAM_DEFAULT;
+  // v0.6.1: start a little lower and further back (with the wider lens) so the mountain ahead
+  // fills more of the view.
+  runtime.cam.pitch = 0.17;
+  runtime.cam.dist = CAM_DEFAULT + 1.2;
 }
 
 export const useGame = create<GameStore>((set, get) => ({
