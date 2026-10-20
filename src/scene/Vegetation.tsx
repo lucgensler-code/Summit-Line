@@ -5,6 +5,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { cairnKitGeometry, isBentVariant, kitGeometry } from '../kit/catalogue';
 import { mulberry32 } from '../game/noise';
 import { useGame } from '../game/store';
+import { quality } from './Performance';
 import { CINDERCREST } from '../recipes';
 import type { KitItem } from '../recipes/cindercrest';
 import { TRAIL_HALF_WIDTH, getWorld, heightAt, type Scatter } from '../game/world';
@@ -136,11 +137,12 @@ function Chunked({
     const margin = (t: number) => Math.max(4, t * 0.06);
     for (let i = 0; i < chunks.length; i++) {
       const d = camera.position.distanceTo(chunks[i].c) - pad;
-      const want = d < near ? 0 : d < hide ? 1 : 2;
+      const want = d >= hide ? 2 : d < near ? 0 : 1;
       const cur = lv[i];
       let next = want;
       if (cur !== undefined && want !== cur) {
         // Only move once the distance is clear of the boundary between the two levels.
+        // 0↔1 switch at `near`; anything involving hidden (2) switches at `hide`
         const edge = Math.min(want, cur) === 0 && Math.max(want, cur) === 1 ? near : hide;
         if (Math.abs(d - edge) < margin(edge)) next = cur;
       }
@@ -171,6 +173,38 @@ const MATS = {
   solid: new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true }),
   plant: new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide }),
 };
+
+/**
+ * Wind sway for ground cover (v0.8): a gentle, per-plant-phase lean in the vertex shader, growing
+ * with height above the plant's base, so grass, flowers and ferns stir in the breeze. Costs a few
+ * ALU ops per vertex; switched off at the lowest quality tier.
+ */
+const SWAY = { uTime: { value: 0 }, uSway: { value: 1 } };
+MATS.plant.onBeforeCompile = (sh) => {
+  sh.uniforms.uTime = SWAY.uTime;
+  sh.uniforms.uSway = SWAY.uSway;
+  sh.vertexShader = sh.vertexShader
+    .replace('#include <common>', '#include <common>\nuniform float uTime;\nuniform float uSway;')
+    .replace(
+      '#include <begin_vertex>',
+      `#include <begin_vertex>
+      #ifdef USE_INSTANCING
+        vec2 sp = instanceMatrix[3].xz;
+        float ph = uTime * 1.6 + sp.x * 0.37 + sp.y * 0.29;
+        float bend = uSway * max(0.0, transformed.y) * max(0.0, transformed.y) * 0.06;
+        transformed.x += (sin(ph) + 0.4 * sin(ph * 2.3 + 1.7)) * bend;
+        transformed.z += (cos(ph * 0.8 + 0.6)) * bend * 0.6;
+      #endif`,
+    );
+};
+
+export function WindSway() {
+  useFrame(({ clock }) => {
+    SWAY.uTime.value = clock.elapsedTime;
+    SWAY.uSway.value = quality.sway ? 1 : 0;
+  });
+  return null;
+}
 
 const RECIPE = CINDERCREST;
 const ITEMS = RECIPE.items as Record<string, KitItem>;

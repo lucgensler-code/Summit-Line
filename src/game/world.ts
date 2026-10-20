@@ -588,6 +588,8 @@ export function rockPatch(x: number, z: number, h: number) {
   const ribs = fbm(Math.atan2(x, z) * 9, r / 40, 2, 337); // radial ribs down the cone
   // v0.8: fewer, narrower ribs (rather than blotches) so the cap reads as snow broken by rock.
   let m = smoothstep(0.3, 0.42, n * 0.35 + ribs * 0.8) * smoothstep(240, 266, h);
+  // keep the final snow slope below the rim clean (no dark shards around the summit)
+  m *= smoothstep(RIM_R + 45, RIM_R + 95, r);
   if (m <= 0) return 0;
   if (world) {
     const t = trailQuery(x, z, 9);

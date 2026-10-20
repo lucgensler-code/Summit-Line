@@ -141,7 +141,8 @@ function pine(s: TreeSettings, seed: number, far: boolean) {
   const bark = col(s.bark);
   const lo = col(s.foliage[0]);
   const hi = col(s.foliage[1]);
-  const stems = 2 + Math.floor(rand() * 2);
+  // distance version: one stem and two clumps — enough for the silhouette at range
+  const stems = far ? 1 : 2 + Math.floor(rand() * 2);
   const base = new THREE.Vector3(0, 0, 0);
   for (let i = 0; i < stems; i++) {
     const a = rand() * Math.PI * 2;

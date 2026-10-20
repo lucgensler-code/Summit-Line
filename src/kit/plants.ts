@@ -140,7 +140,7 @@ export function shrubGeometry(s: ShrubSettings, seed: number) {
     }
   } else if (s.form === 'heather') {
     // Low mat of needle-leaved sprigs with pink bell tips.
-    const sprigs = 26 + Math.floor(rand() * 8);
+    const sprigs = 17 + Math.floor(rand() * 5); // v0.8: fewer, same footprint (budget)
     for (let i = 0; i < sprigs; i++) {
       const a = rand() * Math.PI * 2;
       const r = Math.sqrt(rand()) * s.size * 0.6;

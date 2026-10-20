@@ -61,6 +61,19 @@ export function getLandmarks(): Landmark[] {
   const c1 = offsetFromTrail(Math.max(iCamp - 3, 0), lakeSide, 3.4);
   const c2 = offsetFromTrail(iCamp + 4, -lakeSide, 3.6);
   const spurMi = Math.max(0.1, unitsToMiles(W.lines[1]?.length ?? 40)).toFixed(1);
+  // Viewpoint sign beside the end of the spur, turned to face someone arriving at the shore.
+  const spur = W.lines[1];
+  const tarnView = (() => {
+    if (!spur) return offsetFromTrail(iCamp, lakeSide, 8);
+    const e = spur.pts[spur.pts.length - 1];
+    const b = spur.pts[Math.max(0, spur.pts.length - 4)];
+    const dx = e.x - b.x;
+    const dz = e.z - b.z;
+    const l = Math.hypot(dx, dz) || 1;
+    const x = e.x - (dz / l) * 2.6;
+    const z = e.z + (dx / l) * 2.6;
+    return { x, z, y: heightAt(x, z), rot: Math.atan2(dx, dz) };
+  })();
   const r1 = offsetFromTrail(iRim, -1, 3);
   cache = [
     {
@@ -84,6 +97,14 @@ export function getLandmarks(): Landmark[] {
       ...c1,
       title: 'Obsidian Tarn ↗ — alpine checkpoint',
       text: `↗ Obsidian Tarn ${spurMi} mi: last reliable water. Filter here.\n↑ Summit ${mi(camp.s)} mi via the cinder switchbacks.`,
+    },
+    {
+      // v0.8: a small viewpoint where the tarn spur meets the shore
+      id: 'tarn-view',
+      kind: 'sign',
+      ...tarnView,
+      title: 'Obsidian Tarn — 7,040 ft',
+      text: `Snowmelt tarn below the cinder cone. Fill up here: there's no water above.\nThe summit is ${mi(camp.s)} mi back up the switchbacks.`,
     },
     {
       id: 'camp-register',

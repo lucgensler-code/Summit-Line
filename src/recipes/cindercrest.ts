@@ -77,7 +77,7 @@ const GREY = ['#8c857e', '#7d7670', '#9a9189'];
 // --------------------------------------------------------------------------------------------
 export const ITEMS = {
   // trees ---------------------------------------------------------------------------------------
-  douglasFir: { kind: 'tree', settings: douglasFir, variants: 3, near: 55, hide: Infinity },
+  douglasFir: { kind: 'tree', settings: douglasFir, variants: 2, near: 55, hide: Infinity },
   westernHemlock: { kind: 'tree', settings: westernHemlock, variants: 3, near: 55, hide: Infinity },
   mountainHemlock: { kind: 'tree', settings: mountainHemlock, variants: 3, near: 55, hide: Infinity },
   subalpineFir: { kind: 'tree', settings: subalpineFir, variants: 2, near: 55, hide: Infinity },
@@ -104,10 +104,10 @@ export const ITEMS = {
   paintbrush: { kind: 'flower', settings: { grass: { blades: 4, height: 0.3, spread: 0.5, width: 0.035, base: '#4c6438', tip: '#88a058', dry: 0.1 }, stalks: 3, head: 'brush', colors: ['#e0503a', '#ef6a3c', '#d83f4a'], stalkHeight: 0.42 }, variants: 2, hide: 32 },
   aster: { kind: 'flower', settings: { grass: { blades: 4, height: 0.28, spread: 0.5, width: 0.03, base: '#4c6438', tip: '#8aa05a', dry: 0.2 }, stalks: 4, head: 'daisy', colors: ['#c9b8e8', '#f2f0e6', '#e9d36a'], stalkHeight: 0.32 }, variants: 2, hide: 32 },
   beargrass: { kind: 'flower', settings: { grass: { blades: 16, height: 0.7, spread: 0.9, width: 0.025, base: '#3f5a33', tip: '#93a35e', dry: 0.15 }, stalks: 1, head: 'club', colors: ['#f3ecd2'], stalkHeight: 1.2 }, variants: 2, hide: 80 },
-  heather: { kind: 'shrub', settings: { form: 'heather', size: 1.0, leaf: ['#2f4a2c', '#5c7a42'], accent: '#d76a9c', accentAmount: 0.35 }, variants: 3, hide: 55 },
+  heather: { kind: 'shrub', settings: { form: 'heather', size: 1.0, leaf: ['#2f4a2c', '#5c7a42'], accent: '#d76a9c', accentAmount: 0.35 }, variants: 3, hide: 42 },
   huckleberry: { kind: 'shrub', settings: { form: 'huckleberry', size: 1.1, leaf: ['#3e5e2e', '#6f8c3e'], accent: '#a8452e', accentAmount: 0.25 }, variants: 3, hide: 65 },
   cushion: { kind: 'shrub', settings: { form: 'cushion', size: 0.75, leaf: ['#5b6a44', '#8e9a68'], accent: '#e6a7c5', accentAmount: 0.4 }, variants: 2, hide: 60 },
-  fern: { kind: 'fern', settings: { fronds: 10, length: 1.35, arch: 0.6, color: ['#4f7f36', '#93bd5a'] }, variants: 2, hide: 60 },
+  fern: { kind: 'fern', settings: { fronds: 10, length: 1.35, arch: 0.6, color: ['#4f7f36', '#93bd5a'] }, variants: 2, hide: 48 },
 } satisfies Record<string, KitItem>;
 
 export type ItemId = keyof typeof ITEMS;

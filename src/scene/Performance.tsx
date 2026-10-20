@@ -7,13 +7,14 @@ import { useGame } from '../game/store';
  * Optional visual layers the governor can switch off on slower devices (v0.6.1), in order:
  * the glow/colour-grade pass first, then valley mist (with lower resolution), then shadow detail.
  */
-export const quality = { post: true, mist: true };
+export const quality = { post: true, mist: true, sway: true };
 /** `?hq` pins full quality (for testing a fast device); `?lq` starts at the lowest tier. */
 const qParams = typeof location !== 'undefined' ? new URLSearchParams(location.search) : null;
 const PIN_HQ = !!qParams?.has('hq');
 if (qParams?.has('lq')) {
   quality.post = false;
   quality.mist = false;
+  quality.sway = false;
 }
 
 /**
@@ -85,7 +86,7 @@ export function PerfGovernor() {
         // Cheapest big win first: drop the full-screen glow / colour-grade pass.
         quality.post = false;
       } else if (tier.current <= 3) {
-        if (tier.current === 3) quality.mist = false;
+        if (tier.current === 3) quality.mist = quality.sway = false;
         const dpr = Math.max(0.85, perfStats.dpr - 0.2);
         setDpr(dpr);
         perfStats.dpr = dpr;
