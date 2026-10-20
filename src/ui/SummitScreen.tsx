@@ -12,7 +12,7 @@ import { CameraGestures, isTouchDevice } from './TouchControls';
 import { useUnits } from './useUnits';
 
 const LINE_COLORS: Record<string, string> = {
-  speed: '#e9a25f',
+  speed: '#e5484d', // v0.8: red, distinct from the orange used for tabs and buttons
   gems: '#4fd197',
   summit: '#6f95c9',
   clean: '#6fc0c0',

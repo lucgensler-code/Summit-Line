@@ -7,9 +7,24 @@ import type { KitItem } from '../recipes/cindercrest';
 import { crystalBaseGeometry, crystalGeometry } from './gems';
 import { fernGeometry, flowerGeometry, grassGeometry, shrubGeometry } from './plants';
 import { cairnGeometry, rockGeometry } from './rocks';
-import { treeGeometry } from './trees';
+import { treeGeometry, type TreeSettings } from './trees';
 
 const cache = new Map<string, THREE.BufferGeometry>();
+
+/**
+ * Tree variants (v0.8): variant 0 is the species as written; 1 is a slimmer, taller form; 2 a
+ * fuller, denser crown. A bent leader appears only on the last variant of a species that has
+ * one, so with three variants roughly a third of those trees nod (and they share one wind
+ * direction — see `isBentVariant`).
+ */
+export function treeVariant(s: TreeSettings, variant: number, variants: number): TreeSettings {
+  const v = { ...s, leaderBend: isBentVariant(s, variant, variants) ? s.leaderBend : 0 };
+  if (s.form !== 'conifer') return v;
+  if (variant % 3 === 1) return { ...v, width: s.width * 0.84, height: s.height * 1.08, tiers: s.tiers + 1 };
+  if (variant % 3 === 2) return { ...v, width: s.width * 1.12, irregularity: Math.min(1, s.irregularity + 0.15) };
+  return v;
+}
+export const isBentVariant = (s: TreeSettings, variant: number, variants: number) => s.leaderBend > 0 && variants > 1 && variant === variants - 1;
 
 /** Stable per-item seed so variants never change between builds. */
 function seedFor(id: string, variant: number) {
@@ -22,7 +37,7 @@ export function buildItem(item: KitItem, id: string, variant: number, far: boole
   const seed = seedFor(id, variant);
   switch (item.kind) {
     case 'tree':
-      return treeGeometry(item.settings, seed, far);
+      return treeGeometry(treeVariant(item.settings, variant, item.variants), seed, far);
     case 'rock':
       return rockGeometry(item.settings, seed, far);
     case 'grass':

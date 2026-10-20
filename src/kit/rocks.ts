@@ -81,8 +81,11 @@ export function rockGeometry(s: RockSettings, seed: number, far = false) {
     g,
     rand,
     (c, n, out) => {
-      out.copy(stones[Math.floor(rand() * stones.length)]);
-      if (stones.length > 1) out.lerp(stones[0], 0.35);
+      // v0.8: stone colour drifts smoothly across the rock (neighbouring faces stay close),
+      // instead of a random colour per face.
+      const tone = clamp01(fbm(c.x * 1.3 + seed * 0.37, c.z * 1.3 + c.y * 0.9, 2, seed + 9) * 0.9 + 0.5) * (stones.length - 1);
+      const i0 = Math.floor(tone);
+      out.copy(stones[i0]).lerp(stones[Math.min(stones.length - 1, i0 + 1)], tone - i0);
       // darker toward the ground, darker on overhangs
       out.multiplyScalar(groundAO(c.y, -0.3 * top, 0.5 * top, 0.62) * (n.y < -0.3 ? 0.75 : 1));
       if (s.cracks > 0) {
@@ -90,9 +93,14 @@ export function rockGeometry(s: RockSettings, seed: number, far = false) {
         if (band < 0.12 * s.cracks + 0.02) out.multiplyScalar(0.62);
       }
       const up = n.y;
-      const mossMask = s.moss * smooth(0.25, 0.75, up) * smooth(-0.3, 0.2, fbm(c.x * 2 + seed, c.z * 2, 2, seed + 5));
-      if (mossMask > 0) out.lerp(moss, clamp01(mossMask * 1.2));
-      if (s.lichen > 0 && up < 0.6 && rand() < s.lichen * 0.35) out.lerp(lichen, 0.45);
+      // Moss and lichen in soft patches: smooth noise masks with gradual edges, so a patch spans
+      // several faces and fades out rather than flipping single triangles.
+      const mossMask = s.moss * smooth(0.1, 0.8, up) * smooth(-0.35, 0.35, fbm(c.x * 1.6 + seed, c.z * 1.6, 2, seed + 5));
+      if (mossMask > 0) out.lerp(moss, clamp01(mossMask * 0.9));
+      if (s.lichen > 0) {
+        const lichenMask = s.lichen * smooth(0.0, 0.5, fbm(c.x * 2.4 - seed, c.y * 2.4 + c.z, 2, seed + 7)) * (1 - smooth(0.55, 0.9, up));
+        if (lichenMask > 0) out.lerp(lichen, clamp01(lichenMask * 0.55));
+      }
       if (s.snow > 0) {
         const snowMask = s.snow * smooth(0.3, 0.75, up) * smooth(-0.2 * top, 0.2 * top, c.y);
         if (snowMask > 0) out.lerp(up > 0.7 ? SNOW : SNOW_SHADE, clamp01(snowMask * 1.3));
@@ -103,12 +111,14 @@ export function rockGeometry(s: RockSettings, seed: number, far = false) {
 }
 
 /**
- * A cairn: flat stones, widest at the bottom, each resting on the one below with a small
- * offset — balanced, never floating. `stones` 3–7.
+ * A cairn: stones stacked so each one genuinely rests on the one below — widest at the bottom,
+ * each centred over its support with only a small offset, and the whole stack's centre kept over
+ * the base stone. Stones keep natural, varied shapes (not uniformly flat discs). `stones` 3–7.
  */
 export interface CairnSettings {
   stones: number;
   baseWidth: number;
+  /** stone height relative to width (≈0.5 flat … 0.9 chunky); varies per stone */
   flatness: number;
   colors: string[];
   lichen: number;
@@ -117,23 +127,44 @@ export interface CairnSettings {
 export function cairnGeometry(s: CairnSettings, seed: number) {
   const rand = mulberry32(seed);
   const parts: THREE.BufferGeometry[] = [];
-  let y = 0;
-  let ox = 0;
-  let oz = 0;
+  let below: THREE.BufferGeometry | null = null;
+  let cx = 0;
+  let cz = 0;
   for (let i = 0; i < s.stones; i++) {
     const t = i / Math.max(1, s.stones - 1);
-    const w = s.baseWidth * (1 - t * 0.62) * (0.9 + rand() * 0.2);
-    const h = w * s.flatness * (0.8 + rand() * 0.4);
+    const w = s.baseWidth * (1 - t * 0.55) * (0.9 + rand() * 0.2);
+    const h = w * s.flatness * (0.8 + rand() * 0.45);
     const stone = rockGeometry(
-      { detail: 1, shape: [1.1 + rand() * 0.3, 1, 0.95 + rand() * 0.2], lumpiness: 0.12, cuts: 5, angularity: 0.7, ledges: 0, cracks: 0, colors: s.colors, moss: 0, mossColor: '#5d7a3c', lichen: s.lichen, lichenColor: '#a8a070', snow: 0 },
+      { detail: 1, shape: [1 + rand() * 0.25, 1, 0.9 + rand() * 0.2], lumpiness: 0.16, cuts: 5, angularity: 0.55, ledges: 0, cracks: 0, colors: s.colors, moss: 0, mossColor: '#5d7a3c', lichen: s.lichen * (1 - t * 0.5), lichenColor: '#a8a070', snow: 0 },
       seed * 13 + i,
     );
-    // rockGeometry spans y ∈ [-0.3, ~0.8] before scaling; sit its base on the stone below.
-    stone.scale(w, h, w).rotateY(rand() * Math.PI).translate(ox, y + 0.3 * h, oz);
+    // Small offset from the support, pulled back toward the base axis so the stack never leans
+    // out past its footing.
+    if (i > 0) {
+      cx = cx * 0.5 + (rand() - 0.5) * w * 0.14;
+      cz = cz * 0.5 + (rand() - 0.5) * w * 0.14;
+    }
+    stone.scale(w, h, w).rotateY(rand() * Math.PI).rotateX((rand() - 0.5) * 0.08).rotateZ((rand() - 0.5) * 0.08);
+    stone.computeBoundingBox();
+    const bb = stone.boundingBox!;
+    // Rest it on the real top surface of the stone below, measured under its own footprint.
+    let restY = 0;
+    if (below) {
+      restY = -Infinity;
+      const p = below.attributes.position;
+      const reach = w * 0.38;
+      for (let k = 0; k < p.count; k++) {
+        if (Math.hypot(p.getX(k) - cx, p.getZ(k) - cz) < reach) restY = Math.max(restY, p.getY(k));
+      }
+      if (!isFinite(restY)) {
+        below.computeBoundingBox();
+        restY = below.boundingBox!.max.y;
+      }
+      restY -= h * 0.06; // settle a little into the hollow of the stone below
+    }
+    stone.translate(cx - (bb.min.x + bb.max.x) / 2, restY - bb.min.y, cz - (bb.min.z + bb.max.z) / 2);
     parts.push(stone);
-    y += h * 0.95;
-    ox += (rand() - 0.5) * w * 0.12;
-    oz += (rand() - 0.5) * w * 0.12;
+    below = stone;
   }
   const g = parts.length === 1 ? parts[0] : mergeRocks(parts);
   return g;

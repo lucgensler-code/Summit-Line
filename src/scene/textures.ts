@@ -6,17 +6,18 @@
 import * as THREE from 'three';
 
 /**
- * A white RGBA texture whose alpha comes from `alpha(u, v)` (u, v in 0…1, v = 0 at the top row).
- * Mipmapped and filtered like a canvas texture.
+ * An RGBA texture whose alpha comes from `alpha(u, v)` (u, v in 0…1, v = 0 at the top row).
+ * Colour is white, or with `grey` the same value as alpha (for materials' `alphaMap`, which reads
+ * the green channel). Mipmapped and filtered like a canvas texture.
  */
-export function alphaTexture(w: number, h: number, alpha: (u: number, v: number) => number) {
+export function alphaTexture(w: number, h: number, alpha: (u: number, v: number) => number, grey = false) {
   const data = new Uint8Array(w * h * 4);
   for (let y = 0; y < h; y++)
     for (let x = 0; x < w; x++) {
-      const a = alpha((x + 0.5) / w, (y + 0.5) / h);
+      const a = Math.round(Math.max(0, Math.min(1, alpha((x + 0.5) / w, (y + 0.5) / h))) * 255);
       const o = (y * w + x) * 4;
-      data[o] = data[o + 1] = data[o + 2] = 255;
-      data[o + 3] = Math.round(Math.max(0, Math.min(1, a)) * 255);
+      data[o] = data[o + 1] = data[o + 2] = grey ? a : 255;
+      data[o + 3] = a;
     }
   const tex = new THREE.DataTexture(data, w, h, THREE.RGBAFormat);
   tex.flipY = false;

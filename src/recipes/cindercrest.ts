@@ -28,25 +28,30 @@ export type KitItem =
 // --------------------------------------------------------------------------------------------
 //  Trees
 // --------------------------------------------------------------------------------------------
+// v0.8: species read apart by silhouette and colour, not just size.
+// Douglas fir: tall and straight, regular whorls with upturned tips, a long bare trunk, deep
+// blue-green. Western hemlock: broad, soft and drooping, yellow-green, a nodding top on some.
+// Mountain hemlock: shorter, shaggy, drooping, blue-grey-green. Subalpine fir: a narrow dark
+// spire with short stiff branches. Whitebark pine: wind-shaped clumps, yellow-green.
 const douglasFir: TreeSettings = {
-  form: 'conifer', height: 13, tiers: 6, width: 0.27, taper: 1.05, droop: 0.35, irregularity: 0.7, sides: 6,
-  trunkHeight: 0.16, leaderBend: 0, foliage: ['#2d4632', '#4d6a43'], bark: '#5e4030', snow: 0,
+  form: 'conifer', height: 14, tiers: 7, width: 0.25, taper: 1.0, droop: -0.25, irregularity: 0.4, sides: 5,
+  trunkHeight: 0.2, leaderBend: 0, foliage: ['#1f372c', '#3b5a45'], bark: '#6a4431', snow: 0,
 };
 const westernHemlock: TreeSettings = {
-  form: 'conifer', height: 12, tiers: 6, width: 0.25, taper: 1.15, droop: 0.65, irregularity: 0.8, sides: 6,
-  trunkHeight: 0.12, leaderBend: 0.9, foliage: ['#294234', '#46653f'], bark: '#58402f', snow: 0,
+  form: 'conifer', height: 12, tiers: 7, width: 0.3, taper: 0.85, droop: 0.95, irregularity: 0.85, sides: 6,
+  trunkHeight: 0.1, leaderBend: 0.9, foliage: ['#304a2a', '#6f8f45'], bark: '#5a3e2e', snow: 0,
 };
 const mountainHemlock: TreeSettings = {
-  form: 'conifer', height: 10, tiers: 6, width: 0.27, taper: 1.0, droop: 0.75, irregularity: 0.9, sides: 6,
-  trunkHeight: 0.08, leaderBend: 0.7, foliage: ['#2b4038', '#4f6a4c'], bark: '#5a4436', snow: 0,
+  form: 'conifer', height: 9.5, tiers: 6, width: 0.27, taper: 0.95, droop: 0.8, irregularity: 0.95, sides: 6,
+  trunkHeight: 0.05, leaderBend: 0.6, foliage: ['#2d4239', '#5e7a5f'], bark: '#5a4436', snow: 0,
 };
 const subalpineFir: TreeSettings = {
-  form: 'conifer', height: 10, tiers: 6, width: 0.17, taper: 1.35, droop: 0.4, irregularity: 0.6, sides: 6,
-  trunkHeight: 0.06, leaderBend: 0, foliage: ['#2c4440', '#4c6a58'], bark: '#6a5444', snow: 0,
+  form: 'conifer', height: 11, tiers: 7, width: 0.17, taper: 1.5, droop: 0.15, irregularity: 0.35, sides: 5,
+  trunkHeight: 0.03, leaderBend: 0, foliage: ['#203436', '#3c5856'], bark: '#6a5444', snow: 0,
 };
 const whitebarkPine: TreeSettings = {
   form: 'pine', height: 6, tiers: 0, width: 0, taper: 0, droop: 0, irregularity: 0.8, sides: 0,
-  trunkHeight: 0, leaderBend: 0, foliage: ['#3c5234', '#64784a'], bark: '#8c8478', snow: 0,
+  trunkHeight: 0, leaderBend: 0, foliage: ['#4a5e30', '#86964e'], bark: '#8c8478', snow: 0,
 };
 const snag: TreeSettings = {
   form: 'snag', height: 10, tiers: 0, width: 0, taper: 0, droop: 0, irregularity: 0, sides: 0,
@@ -59,10 +64,11 @@ const snowy = (t: TreeSettings, snow = 0.55): TreeSettings => ({ ...t, snow });
 // --------------------------------------------------------------------------------------------
 const rock = (r: Partial<RockSettings>): RockSettings => ({
   detail: 1, shape: [1.1, 1.05, 1], lumpiness: 0.18, cuts: 7, angularity: 0.65, ledges: 0, cracks: 0.4,
-  colors: ['#7f7670', '#6c6560', '#8a8078'], moss: 0, mossColor: '#58773a', lichen: 0.25, lichenColor: '#a9a16c', snow: 0, ...r,
+  colors: ['#7f7670', '#6c6560', '#8a8078'], moss: 0, mossColor: '#58773a', lichen: 0.25, lichenColor: '#a4a284', snow: 0, ...r,
 });
 const FOREST_STONE = ['#7a736c', '#6a645f', '#857c74'];
-const BASALT = ['#4f4a4a', '#5b5453', '#45403f'];
+// v0.8: warmer basalt so cone rocks don't read as black slabs
+const BASALT = ['#5b4f4a', '#685a53', '#4f4542'];
 const CINDER = ['#7a4a3c', '#6a3f34', '#8a5845'];
 const GREY = ['#8c857e', '#7d7670', '#9a9189'];
 
@@ -71,11 +77,11 @@ const GREY = ['#8c857e', '#7d7670', '#9a9189'];
 // --------------------------------------------------------------------------------------------
 export const ITEMS = {
   // trees ---------------------------------------------------------------------------------------
-  douglasFir: { kind: 'tree', settings: douglasFir, variants: 2, near: 55, hide: Infinity },
-  westernHemlock: { kind: 'tree', settings: westernHemlock, variants: 2, near: 55, hide: Infinity },
-  mountainHemlock: { kind: 'tree', settings: mountainHemlock, variants: 2, near: 55, hide: Infinity },
+  douglasFir: { kind: 'tree', settings: douglasFir, variants: 3, near: 55, hide: Infinity },
+  westernHemlock: { kind: 'tree', settings: westernHemlock, variants: 3, near: 55, hide: Infinity },
+  mountainHemlock: { kind: 'tree', settings: mountainHemlock, variants: 3, near: 55, hide: Infinity },
   subalpineFir: { kind: 'tree', settings: subalpineFir, variants: 2, near: 55, hide: Infinity },
-  mountainHemlockSnowy: { kind: 'tree', settings: snowy(mountainHemlock), variants: 2, near: 55, hide: Infinity },
+  mountainHemlockSnowy: { kind: 'tree', settings: snowy(mountainHemlock), variants: 3, near: 55, hide: Infinity },
   subalpineFirSnowy: { kind: 'tree', settings: snowy(subalpineFir), variants: 2, near: 55, hide: Infinity },
   whitebarkPine: { kind: 'tree', settings: whitebarkPine, variants: 2, near: 55, hide: Infinity },
   snag: { kind: 'tree', settings: snag, variants: 2, near: 140, hide: 600 },
@@ -83,9 +89,9 @@ export const ITEMS = {
   // rocks ---------------------------------------------------------------------------------------
   forestBoulder: { kind: 'rock', settings: rock({ detail: 1, colors: FOREST_STONE, moss: 0.85, lichen: 0.3 }), variants: 2, near: 120, hide: 700, collide: 0.8 },
   meadowBoulder: { kind: 'rock', settings: rock({ detail: 1, colors: GREY, moss: 0.25, lichen: 0.5 }), variants: 2, near: 120, hide: 900, collide: 0.8 },
-  basaltBoulder: { kind: 'rock', settings: rock({ detail: 1, colors: BASALT, cuts: 9, angularity: 0.8, cracks: 0.6, lichen: 0.15 }), variants: 2, near: 130, hide: 900, collide: 0.8 },
-  cinderRock: { kind: 'rock', settings: rock({ detail: 1, colors: CINDER, lumpiness: 0.28, cuts: 5, angularity: 0.5, lichen: 0.05 }), variants: 2, near: 80, hide: 260 },
-  talus: { kind: 'rock', settings: rock({ detail: 1, colors: BASALT, cuts: 8, angularity: 0.85, shape: [1.2, 0.85, 1], lichen: 0.1 }), variants: 2, near: 70, hide: 220 },
+  basaltBoulder: { kind: 'rock', settings: rock({ detail: 1, colors: BASALT, shape: [1.05, 1.15, 1], cuts: 9, angularity: 0.75, cracks: 0.5, lichen: 0.2 }), variants: 2, near: 130, hide: 900, collide: 0.8 },
+  cinderRock: { kind: 'rock', settings: rock({ detail: 1, colors: CINDER, shape: [1, 1.2, 0.95], lumpiness: 0.28, cuts: 5, angularity: 0.5, lichen: 0.05 }), variants: 2, near: 80, hide: 260 },
+  talus: { kind: 'rock', settings: rock({ detail: 1, colors: BASALT, cuts: 8, angularity: 0.75, shape: [1.1, 1.1, 1], lichen: 0.12 }), variants: 2, near: 70, hide: 220 },
   snowRock: { kind: 'rock', settings: rock({ detail: 1, colors: BASALT, cuts: 8, angularity: 0.75, snow: 0.8, lichen: 0 }), variants: 2, near: 130, hide: 900, collide: 0.8 },
   outcrop: { kind: 'rock', settings: rock({ detail: 2, colors: BASALT, shape: [1.7, 1.15, 1.05], cuts: 9, angularity: 0.75, ledges: 0.7, cracks: 0.7, lichen: 0.12 }), variants: 2, near: 160, hide: Infinity, collide: 0.7 },
   outcropSnowy: { kind: 'rock', settings: rock({ detail: 2, colors: BASALT, shape: [1.7, 1.15, 1.05], cuts: 9, angularity: 0.75, ledges: 0.7, cracks: 0.6, snow: 0.75 }), variants: 2, near: 160, hide: Infinity, collide: 0.7 },
@@ -179,9 +185,9 @@ export const PLACEMENT = {
     maxSlope: 0.32,
     settings: [
       { stones: 5, baseWidth: 0.95, flatness: 0.62, colors: GREY, lichen: 0.35 },
-      { stones: 4, baseWidth: 1.05, flatness: 0.58, colors: GREY, lichen: 0.25 },
-      { stones: 6, baseWidth: 0.9, flatness: 0.6, colors: GREY, lichen: 0.25 },
-      { stones: 3, baseWidth: 1.15, flatness: 0.66, colors: BASALT, lichen: 0.1 },
+      { stones: 4, baseWidth: 1.05, flatness: 0.72, colors: GREY, lichen: 0.25 },
+      { stones: 5, baseWidth: 0.9, flatness: 0.68, colors: FOREST_STONE, lichen: 0.25 },
+      { stones: 3, baseWidth: 1.15, flatness: 0.78, colors: BASALT, lichen: 0.1 },
     ] as CairnSettings[],
   },
 

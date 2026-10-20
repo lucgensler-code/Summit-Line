@@ -5,7 +5,7 @@
 // Pure data in, scatter lists + colliders out: no rendering here, so the headless sim uses it too.
 import { fbm, mulberry32, smoothstep } from './noise';
 import type { Recipe } from '../recipes';
-import { BOUNDARY_R, HALF, LAKE, TRAIL_HALF_WIDTH, TRAILHEAD_FT, TREELINE_H, corridorUnits, trailFieldDistance, type TrailHit, type World } from './world';
+import { BOUNDARY_R, HALF, LAKE, RIM_R, TRAIL_HALF_WIDTH, TRAILHEAD_FT, TREELINE_H, corridorUnits, trailFieldDistance, type TrailHit, type World } from './world';
 
 interface Tools {
   heightAt(x: number, z: number): number;
@@ -224,7 +224,8 @@ export function placeScenery(W: World, recipe: Recipe, T: Tools) {
         T.addCollider(x, z, s * (ITEMS[item]?.collide ?? 0.7));
       }
     }
-    scatterBand(R.summitRocks, (x, z, f) => f > R.summitRocks.from && Math.hypot(x, z) > 20, 0.3);
+    // (v0.8: never inside the crater, and clear of the summit cairn)
+    scatterBand(R.summitRocks, (x, z, f) => f > R.summitRocks.from && Math.hypot(x, z) > RIM_R + 6 && Math.hypot(x - W.summit.x, z - W.summit.z) > 8, 0.3);
   }
 
   // ------------------------------------------------------------------------------ ground cover
@@ -295,7 +296,7 @@ export function placeScenery(W: World, recipe: Recipe, T: Tools) {
       let y = Infinity;
       for (const [ox, oz] of [[0.6, 0], [-0.6, 0], [0, 0.6], [0, -0.6], [0, 0]]) y = Math.min(y, T.heightAt(best.x + ox, best.z + oz));
       const variant = Math.floor(rand() * C.settings.length);
-      W.cairns.push({ x: best.x, z: best.z, y: y - 0.06, s: 0.95 + rand() * 0.2, rot: rand() * Math.PI * 2, tint: rand(), item: `cairn${variant}` });
+      W.cairns.push({ x: best.x, z: best.z, y: y - 0.1, s: 0.95 + rand() * 0.2, rot: rand() * Math.PI * 2, tint: rand(), item: `cairn${variant}` });
       T.addCollider(best.x, best.z, 0.6);
       lastMark = main.s[i];
     }
@@ -313,7 +314,7 @@ export function placeScenery(W: World, recipe: Recipe, T: Tools) {
         let y = Infinity;
         for (const [ox, oz] of [[0.6, 0], [-0.6, 0], [0, 0.6], [0, -0.6], [0, 0]]) y = Math.min(y, T.heightAt(x + ox, z + oz));
         const variant = Math.floor(rand() * C.settings.length);
-        W.cairns.push({ x, z, y: y - 0.06, s: 0.85 + rand() * 0.15, rot: rand() * Math.PI * 2, tint: rand(), item: `cairn${variant}` });
+        W.cairns.push({ x, z, y: y - 0.1, s: 0.85 + rand() * 0.15, rot: rand() * Math.PI * 2, tint: rand(), item: `cairn${variant}` });
         T.addCollider(x, z, 0.6);
       }
   }

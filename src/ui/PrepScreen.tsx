@@ -88,7 +88,7 @@ export function PrepScreen() {
               </span>
             </div>
           </div>
-          <RouteProfile width={360} height={96} labels />
+          <RouteProfile width={360} height={96} labels fluid />
           <p className="forecast">
             <b>Forecast</b> · {fmtTemp(wxTrail.tempF)} at the trailhead, {fmtTemp(wxTop.tempF)} and {fmtWind(wxTop.windMph)} wind on the summit. Snow softens after 10 AM. Last water at
             Obsidian Tarn.

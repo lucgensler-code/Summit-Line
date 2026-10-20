@@ -2,8 +2,9 @@ import { useFrame } from '@react-three/fiber';
 import { useLayoutEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { cairnKitGeometry, kitGeometry } from '../kit/catalogue';
+import { cairnKitGeometry, isBentVariant, kitGeometry } from '../kit/catalogue';
 import { mulberry32 } from '../game/noise';
+import { useGame } from '../game/store';
 import { CINDERCREST } from '../recipes';
 import type { KitItem } from '../recipes/cindercrest';
 import { TRAIL_HALF_WIDTH, getWorld, heightAt, type Scatter } from '../game/world';
@@ -41,7 +42,7 @@ const v = new THREE.Vector3();
 const sc = new THREE.Vector3();
 const col = new THREE.Color();
 
-type Placer = (it: Scatter, i: number) => { y?: number; sx: number; sy: number; sz: number; rx?: number; rz?: number; color?: THREE.Color };
+type Placer = (it: Scatter, i: number) => { y?: number; sx: number; sy: number; sz: number; rx?: number; ry?: number; rz?: number; color?: THREE.Color };
 
 function useInstances(ref: React.RefObject<THREE.InstancedMesh | null>, items: Scatter[], place: Placer) {
   useLayoutEffect(() => {
@@ -49,7 +50,7 @@ function useInstances(ref: React.RefObject<THREE.InstancedMesh | null>, items: S
     if (!mesh) return;
     items.forEach((it, i) => {
       const p = place(it, i);
-      e.set(p.rx ?? 0, it.rot, p.rz ?? 0);
+      e.set(p.rx ?? 0, p.ry ?? it.rot, p.rz ?? 0);
       q.setFromEuler(e);
       v.set(it.x, p.y ?? it.y, it.z);
       sc.set(p.sx, p.sy, p.sz);
@@ -175,9 +176,17 @@ const RECIPE = CINDERCREST;
 const ITEMS = RECIPE.items as Record<string, KitItem>;
 
 /** Instance look: per-instance size, lean and a gentle brightness / warmth shift. */
-function placerFor(kind: KitItem['kind']): Placer {
+/** Prevailing wind (y rotation) that bent tree tops lean with; a small spread keeps it natural. */
+const WIND_ROT = 2.2;
+
+function placerFor(kind: KitItem['kind'], bent = false): Placer {
   if (kind === 'tree')
     return (it) => {
+      if (bent) {
+        const k = 0.9 + ((it.tint * 7.3) % 1) * 0.18;
+        col.setRGB(k, k, k);
+        return { sx: it.s, sy: it.s * (0.95 + it.tint * 0.15), sz: it.s, ry: WIND_ROT + (((it.tint * 13.1) % 1) - 0.5) * 0.5, color: col };
+      }
       const k = 0.9 + ((it.tint * 7.3) % 1) * 0.18;
       col.setRGB(k * (0.98 + ((it.tint * 3.1) % 1) * 0.06), k, k * (0.96 + ((it.tint * 5.7) % 1) * 0.06));
       const wide = 0.85 + ((it.tint * 5.1) % 1) * 0.3;
@@ -233,7 +242,7 @@ function KitLayer({ items, cell, cast = false }: { items: Scatter[]; cell: numbe
             hide={def.hide}
             cell={cell}
             material={isPlant ? MATS.plant : MATS.solid}
-            place={placerFor(def.kind)}
+            place={placerFor(def.kind, def.kind === 'tree' && isBentVariant(def.settings, variant, def.variants))}
             cast={castThis}
             receive={!isPlant}
           />
@@ -250,7 +259,13 @@ export function Trees() {
 
 export function Rocks() {
   const W = getWorld();
-  return <KitLayer items={W.rocks} cell={220} cast />;
+  // v0.8: hidden on the home screen — from a kilometre away they read as dark specks.
+  const prep = useGame((s) => s.phase === 'prep');
+  return (
+    <group visible={!prep}>
+      <KitLayer items={W.rocks} cell={220} cast />
+    </group>
+  );
 }
 
 /** Ground cover: grass, wildflowers, shrubs and ferns (kept for the old component name). */

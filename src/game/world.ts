@@ -586,7 +586,8 @@ export function rockPatch(x: number, z: number, h: number) {
   if (r < RIM_R + 6) return 0;
   const n = fbm(x / 26 + 3, z / 26 - 7, 3, 331);
   const ribs = fbm(Math.atan2(x, z) * 9, r / 40, 2, 337); // radial ribs down the cone
-  let m = smoothstep(0.06, 0.22, n * 0.75 + ribs * 0.45) * smoothstep(232, 258, h);
+  // v0.8: fewer, narrower ribs (rather than blotches) so the cap reads as snow broken by rock.
+  let m = smoothstep(0.3, 0.42, n * 0.35 + ribs * 0.8) * smoothstep(240, 266, h);
   if (m <= 0) return 0;
   if (world) {
     const t = trailQuery(x, z, 9);
@@ -601,7 +602,8 @@ export function snowCover(x: number, z: number, h: number, slope: number) {
   const line = 252 + fbm(x / 70, z / 70, 3, 77) * 22;
   let s = smoothstep(line - 6, line + 8, h);
   // Lingering patches lower down in hollows on the north/shaded side.
-  const patch = smoothstep(0.35, 0.6, fbm(x / 45 + 9, z / 45, 3, 61)) * smoothstep(175, 215, h);
+  // (v0.8: rarer, so the lower cone isn't spotted with white from a distance)
+  const patch = smoothstep(0.5, 0.7, fbm(x / 45 + 9, z / 45, 3, 61)) * smoothstep(190, 225, h);
   s = Math.max(s, patch * 0.9);
   s *= 1 - smoothstep(1.2, 1.7, slope);
   if (r < RIM_R + 1) s = Math.max(s, 0.85);

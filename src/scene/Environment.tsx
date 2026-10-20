@@ -308,6 +308,8 @@ export function Atmosphere() {
     // melt into the same mist the ranges rise out of.
     fog.near = 120 + elevBoost * 140;
     fog.far = (1900 + elevBoost * 900) * pal.fog * (1 - afternoon * 0.2);
+    // v0.8: the summit view should reward the climb — clearer air for the celebration.
+    if (useGame.getState().phase === 'summit') fog.far *= 1.4;
     if (useGame.getState().phase === 'prep') {
       // Home screen: the mountain is viewed from 1–1.3 km (further on portrait phones), so fog
       // starts beyond it — the mountain stays crisp on every screen.
@@ -378,17 +380,32 @@ export const HAZE = new THREE.Color('#c8d0e4');
 
 const _c = new THREE.Color();
 /** Bake vertex colours (albedo × (1 − haze)) and uv.y = haze into a non-indexed geometry. */
-function bakeHaze(g: THREE.BufferGeometry, albedo: (x: number, y: number, z: number, out: THREE.Color) => void, haze: (y: number) => number) {
+function bakeHaze(g: THREE.BufferGeometry, albedo: (x: number, y: number, z: number, out: THREE.Color) => void, haze: (y: number) => number, perFace = false) {
   const geo = g.index ? g.toNonIndexed() : g;
   const pos = geo.attributes.position;
   const col = new Float32Array(pos.count * 3);
   const uv = new Float32Array(pos.count * 2);
+  const face = new THREE.Color();
   for (let i = 0; i < pos.count; i++) {
     const x = pos.getX(i);
     const y = pos.getY(i);
     const z = pos.getZ(i);
     const h = Math.min(1, Math.max(0, haze(y)));
-    albedo(x, y, z, _c);
+    if (perFace) {
+      // one albedo per triangle (from its centroid): crisp faceted snow/rock edges
+      if (i % 3 === 0) {
+        let cx = 0;
+        let cy = 0;
+        let cz = 0;
+        for (let k = 0; k < 3; k++) {
+          cx += pos.getX(i + k) / 3;
+          cy += pos.getY(i + k) / 3;
+          cz += pos.getZ(i + k) / 3;
+        }
+        albedo(cx, cy, cz, face);
+      }
+      _c.copy(face);
+    } else albedo(x, y, z, _c);
     _c.multiplyScalar(1 - h);
     col.set([_c.r, _c.g, _c.b], i * 3);
     uv.set([0.5, h], i * 2);
@@ -399,10 +416,19 @@ function bakeHaze(g: THREE.BufferGeometry, albedo: (x: number, y: number, z: num
   return geo;
 }
 
-/** A broad, faceted volcano/peak with irregular snow (local coordinates, base at y = 0). */
+/**
+ * A broad, faceted volcano/peak (local coordinates, base at y = 0). v0.8: finer facets and snow
+ * decided per face, so the cap reads like real mountains: snow holds in the gullies and reaches
+ * lower there, rock ribs and the steepest faces stay bare, and the lower edge is broken.
+ * `snowLine` 0…1 is where the snow starts (fraction of height); pass ≤ 0 for a fully
+ * glaciated peak.
+ */
 function peakGeometry(radius: number, height: number, seed: number, jagged: number, snowLine: number, baseHaze: number) {
-  const g = new THREE.ConeGeometry(radius, height, 22, 7, true);
+  const g = new THREE.ConeGeometry(radius, height, 40, 14, true);
   const pos = g.attributes.position;
+  const ribsN = 5 + (seed % 4);
+  // gully/ridge profile around the peak: < 0 gullies, > 0 ridges
+  const relief = (a: number, k: number) => Math.sin(a * ribsN + fbm(Math.cos(a) * 2 + seed, k * 2, 2, seed + 5) * 2.4);
   for (let i = 0; i < pos.count; i++) {
     const x = pos.getX(i);
     const y = pos.getY(i) + height / 2;
@@ -410,24 +436,33 @@ function peakGeometry(radius: number, height: number, seed: number, jagged: numb
     const a = Math.atan2(x, z);
     const k = y / height;
     const n = fbm(Math.cos(a) * 2 + seed, Math.sin(a) * 2 + k * 3, 4, seed) * jagged;
-    const rs = 1 + n * (1 - k) * 0.6;
+    // ridges stand out and gullies cut in, more so on the upper slopes
+    const rs = 1 + n * (1 - k) * 0.6 + relief(a, k) * 0.05 * smoothstep(0.2, 0.7, k) * (1 - k * 0.6);
     const yy = Math.pow(k, 1.25 + 0.4 * Math.sin(seed)) * height * (1 + n * 0.25);
     pos.setXYZ(i, x * rs, yy, z * rs);
   }
+  const glaciated = snowLine <= 0;
   return bakeHaze(
     g,
     (x, y, z, out) => {
-      const k = y / height;
+      const k = Math.min(1, y / height);
       const a = Math.atan2(x, z);
-      const n = fbm(Math.cos(a) * 3 + seed, k * 4, 3, seed + 3);
-      // Snow cap with rock showing through: ragged lower edge, dark rock ribs running down the
-      // faces, and the steepest upper faces left bare.
-      const ribs = smoothstep(0.15, 0.45, Math.abs(Math.sin(a * (5 + (seed % 4)) + n * 3)) - 0.35 + (1 - k) * 0.4);
-      let snowAmt = smoothstep(snowLine - 0.04, snowLine + 0.06, k + n * 0.22);
-      snowAmt *= 1 - ribs * 0.75 * smoothstep(1.0, 0.75, k);
-      out.copy(STYLE.farForest).lerp(STYLE.farRock, smoothstep(0.12, 0.35, k)).lerp(STYLE.farSnow, snowAmt);
+      const n = fbm(Math.cos(a) * 3 + seed, k * 5, 3, seed + 3);
+      const rel = relief(a, k);
+      // gullies hold snow lower down; ridges shed it
+      const line = snowLine + rel * 0.09 + n * 0.12;
+      let snow = glaciated ? 1 : k > line ? 1 : 0;
+      // rock ribs breaking the cap on the ridges, and bare steep faces near the top
+      if (snow && !glaciated && rel > 0.55 && k < 0.93 && n > -0.25) snow = 0;
+      if (snow && !glaciated && k > 0.8 && fbm(a * 4 + seed, k * 8, 2, seed + 11) > 0.42) snow = 0;
+      const rock = smoothstep(0.12, 0.35, k);
+      out.copy(STYLE.farForest).lerp(STYLE.farRock, rock);
+      // darker rock in the gullies below the snow, lighter on the ridges
+      out.multiplyScalar(0.88 + rel * 0.1);
+      if (snow) out.copy(STYLE.farSnow).multiplyScalar(0.92 + rel * 0.06 + n * 0.04);
     },
     (y) => baseHaze + (1 - baseHaze) * smoothstep(height * 0.32, 0, y) * 0.75,
+    true,
   );
 }
 
@@ -587,7 +622,7 @@ function mistTexture() {
     const outer = 1 - smoothstep(0.72, 1.0, r);
     const patch = 0.55 + 0.45 * (fbm(u * 6, v * 6, 3, 515) * 0.5 + 0.5);
     return inner * outer * patch;
-  });
+  }, true);
 }
 
 export function ValleyMist() {
@@ -602,9 +637,13 @@ export function ValleyMist() {
     const mk = (o: number) => new THREE.MeshBasicMaterial({ color: '#ffffff', alphaMap: tex, transparent: true, opacity: o, depthWrite: false, fog: false });
     return { geo, mats: [mk(0.55), mk(0.4)] };
   }, []);
-  useFrame(() => {
+  useFrame(({ camera }) => {
     if (ref.current) ref.current.visible = quality.mist;
     const light = daylight(currentHour());
+    // v0.8: thinner when looking down on it from high up (summit), so the view stays clear
+    const high = smoothstep(150, 330, camera.position.y);
+    mats[0].opacity = 0.55 * (1 - high * 0.55);
+    mats[1].opacity = 0.4 * (1 - high * 0.55);
     for (const m of mats) m.color.copy(HAZE).multiplyScalar(0.85 + light * 0.2);
   });
   return (

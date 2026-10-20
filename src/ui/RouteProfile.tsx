@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { fmtDistance } from '../game/units';
 import { elevationFt, getWorld, unitsToMiles } from '../game/world';
 import { useUnits } from './useUnits';
@@ -12,9 +12,21 @@ const SHORT: Record<string, string> = {
 };
 
 /** Elevation profile of the route, like an outdoor-navigation app, with non-overlapping labels. */
-export function RouteProfile({ progress, width = 260, height = 70, labels = false, reached = [] }: { progress?: number; width?: number; height?: number; labels?: boolean; reached?: string[] }) {
+export function RouteProfile({ progress, width: fixedWidth = 260, height = 70, labels = false, reached = [], fluid = false }: { progress?: number; width?: number; height?: number; labels?: boolean; reached?: string[]; fluid?: boolean }) {
   useUnits();
   const W = getWorld();
+  // `fluid` (v0.8): draw at the container's real width so the profile spans the whole card.
+  const box = useRef<HTMLDivElement>(null);
+  const [measured, setMeasured] = useState(0);
+  useLayoutEffect(() => {
+    if (!fluid || !box.current) return;
+    const el = box.current;
+    const ro = new ResizeObserver(() => setMeasured(Math.round(el.clientWidth)));
+    ro.observe(el);
+    setMeasured(Math.round(el.clientWidth));
+    return () => ro.disconnect();
+  }, [fluid]);
+  const width = fluid && measured > 0 ? measured : fixedWidth;
   const { path, area, cps } = useMemo(() => {
     const main = W.main;
     const feet = main.heights.map((h) => elevationFt(h));
@@ -49,7 +61,7 @@ export function RouteProfile({ progress, width = 260, height = 70, labels = fals
     return { path: d, area, cps };
   }, [W, width, height, labels]);
   const px = progress !== undefined ? 8 + Math.min(Math.max(progress, 0), 1) * (width - 16) : null;
-  return (
+  const svg = (
     <svg className="route-profile" width={width} height={height} viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`Route elevation profile, ${fmtDistance(unitsToMiles(W.main.length))}`}>
       <defs>
         <linearGradient id="rp-fill" x1="0" y1="0" x2="0" y2="1">
@@ -72,4 +84,5 @@ export function RouteProfile({ progress, width = 260, height = 70, labels = fals
       {px !== null && <line x1={px} x2={px} y1={4} y2={height} stroke="#f0a35e" strokeWidth="1.5" strokeDasharray="2 2" />}
     </svg>
   );
+  return fluid ? <div ref={box} className="route-profile-box">{svg}</div> : svg;
 }

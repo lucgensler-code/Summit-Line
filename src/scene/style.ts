@@ -31,7 +31,7 @@ export const STYLE = {
   lichen: C('#8d8c66'),
   // Distance
   farForest: C('#3c5440'),
-  farRock: C('#6b6f88'),
+  farRock: C('#5f6278'), // v0.8: a touch darker so rock reads against the snow caps
   farSnow: C('#e4e8f2'),
 };
 

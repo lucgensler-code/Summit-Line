@@ -69,6 +69,7 @@ for (const [id, item] of Object.entries(items)) {
   const geos = Array.from({ length: n }, (_, v) => kitGeometry(CINDERCREST, id, v));
   const isPlant = item.kind !== 'tree' && item.kind !== 'rock';
   cell(`${id} · ${item.kind}`, item.settings, geos, isPlant ? plant : solid);
+  if (item.kind === 'tree') cell(`${id} · distance version`, 'what the same variants look like past the near range', Array.from({ length: n }, (_, v) => kitGeometry(CINDERCREST, id, v, true)), solid);
 }
 cell('cairns', CINDERCREST.placement.cairns.settings, [0, 1, 2, 3].map((v) => cairnKitGeometry(CINDERCREST, v)));
 cell('gems', CINDERCREST.placement.gems.crystal, [gemKitGeometry(CINDERCREST, 'green'), gemBaseKitGeometry(), gemKitGeometry(CINDERCREST, 'red')]);

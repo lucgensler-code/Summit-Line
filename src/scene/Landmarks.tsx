@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { getLandmarks, type Landmark } from '../game/landmarks';
 import { LAKE, getWorld, heightAt, snowCover } from '../game/world';
 import { merge, tint } from './Vegetation';
+import { cairnGeometry, rockGeometry } from '../kit/rocks';
 import { runtime } from '../game/store';
 
 function SignPost({ lm }: { lm: Landmark }) {
@@ -184,19 +185,24 @@ function SummitMarker() {
   const W = getWorld();
   const flag = useRef<THREE.Mesh>(null);
   const { x, y, z } = W.summit;
+  // v0.8: a proper summit cairn from the scenery kit — a broad apron of stones with a balanced
+  // stack on top, light grey-brown with lichen (it used to read as a pile of dark cubes).
   const cairn = useMemo(() => {
+    const STONE = ['#8f877f', '#7f7871', '#9b9188'];
     const parts: THREE.BufferGeometry[] = [];
-    const ring = (r: number, yy: number, n: number, s: number) => {
-      for (let i = 0; i < n; i++) {
-        const a = (i / n) * Math.PI * 2 + yy;
-        parts.push(tint(new THREE.IcosahedronGeometry(s, 0).scale(1, 0.7, 1).translate(Math.cos(a) * r, yy, Math.sin(a) * r), i % 2 ? '#5d5350' : '#7a6d68'));
-      }
-    };
-    ring(1.0, 0.3, 8, 0.45);
-    ring(0.75, 0.8, 7, 0.38);
-    ring(0.5, 1.25, 6, 0.32);
-    ring(0.25, 1.6, 4, 0.26);
-    return merge(parts);
+    for (let i = 0; i < 7; i++) {
+      const a = (i / 7) * Math.PI * 2 + 0.4;
+      const r = 1.05 + (i % 2) * 0.15;
+      const s = 0.62 + (i % 3) * 0.08;
+      const g = rockGeometry({ detail: 1, shape: [1.15, 0.75, 1], lumpiness: 0.16, cuts: 6, angularity: 0.6, ledges: 0, cracks: 0.2, colors: STONE, moss: 0, mossColor: '#5d7a3c', lichen: 0.35, lichenColor: '#b0a46e', snow: 0 }, 900 + i);
+      parts.push(g.scale(s, s, s).rotateY(a * 1.7).translate(Math.cos(a) * r, 0.05, Math.sin(a) * r));
+    }
+    parts.push(cairnGeometry({ stones: 5, baseWidth: 1.5, flatness: 0.62, colors: STONE, lichen: 0.35 }, 977));
+    return merge(parts.map((p) => {
+      const q = p.clone();
+      q.deleteAttribute('normal');
+      return q;
+    }));
   }, []);
   useFrame(({ clock }) => {
     const f = flag.current;
