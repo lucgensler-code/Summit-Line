@@ -204,7 +204,10 @@ export function DebugPanel() {
       boxes[0].checked = quality.post;
       boxes[3].checked = quality.mist;
     }, 500);
-    return () => clearInterval(id);
+    return () => {
+      clearInterval(id);
+      root.replaceChildren();
+    };
   }, []);
   return debugFlags.on ? <div ref={el} className="debug-panel" onPointerDown={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()} /> : null;
 }
