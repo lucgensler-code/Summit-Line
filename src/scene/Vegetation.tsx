@@ -229,18 +229,18 @@ function KitLayer({ items, cell, cast = false }: { items: Scatter[]; cell: numbe
 
 export function Trees() {
   const W = getWorld();
-  return <KitLayer items={W.trees} cell={200} cast />;
+  return <KitLayer items={W.trees} cell={230} cast />;
 }
 
 export function Rocks() {
   const W = getWorld();
-  return <KitLayer items={W.rocks} cell={140} cast />;
+  return <KitLayer items={W.rocks} cell={220} cast />;
 }
 
 /** Ground cover: grass, wildflowers, shrubs and ferns (kept for the old component name). */
 export function Shrubs() {
   const W = getWorld();
-  return <KitLayer items={W.cover} cell={90} />;
+  return <KitLayer items={W.cover} cell={110} />;
 }
 
 /** v0.7: the old ferns / spires layer is now part of the recipe-driven layers above. */

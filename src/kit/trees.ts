@@ -38,20 +38,20 @@ function conifer(s: TreeSettings, seed: number, far: boolean) {
   const rand = mulberry32(seed);
   const H = s.height;
   const parts: THREE.BufferGeometry[] = [];
-  const sides = far ? Math.max(5, s.sides - 2) : s.sides;
-  const tiers = far ? Math.max(3, Math.round(s.tiers * 0.6)) : s.tiers;
+  const sides = far ? 5 : s.sides;
+  const tiers = far ? 2 : s.tiers;
   const crown0 = s.trunkHeight * H;
   const lo = col(s.foliage[0]);
   const hi = col(s.foliage[1]);
   const bark = col(s.bark);
   // Trunk (visible below the crown; continues inside it).
-  const trunk = new THREE.CylinderGeometry(0.035 * H * 0.7, 0.05 * H, H * 0.9, 6, 1, true).translate(0, H * 0.45, 0);
+  const trunk = new THREE.CylinderGeometry(0.035 * H * 0.7, 0.05 * H, H * 0.9, far ? 4 : 6, 1, true).translate(0, H * 0.45, 0);
   parts.push(paintFaces(trunk, rand, (c, _n, out) => out.copy(bark).multiplyScalar(groundAO(c.y, 0, 1.2, 0.6)), 0.08));
   for (let i = 0; i < tiers; i++) {
     const t = i / Math.max(1, tiers - 1); // 0 bottom tier … 1 top
     const yBase = crown0 + (H - crown0) * Math.pow(t, 0.92) * 0.86;
     const r = Math.max(0.05 * H, s.width * H * Math.pow(1 - t * 0.88, s.taper) * (0.85 + rand() * 0.3 * s.irregularity + 0.15));
-    const h = (H - crown0) / tiers * 2.1 + r * 0.25;
+    const h = ((H - crown0) / tiers) * (far ? 1.7 : 2.1) + r * 0.25;
     const ox = (rand() - 0.5) * s.irregularity * r * 0.25;
     const oz = (rand() - 0.5) * s.irregularity * r * 0.25;
     const twist = rand() * Math.PI * 2;
@@ -74,12 +74,17 @@ function conifer(s: TreeSettings, seed: number, far: boolean) {
     for (let k = 0; k < sides; k++) {
       const a0 = rim[k];
       const a1 = rim[(k + 1) % sides];
+      if (far) {
+        // distance version: plain faceted cone, no shoulder ring or underside
+        tri(a0, a1, apex);
+        continue;
+      }
       const m0 = mid[k];
       const mPrev = mid[(k + sides - 1) % sides];
       tri(a0, a1, m0);
       tri(a0, m0, mPrev);
       tri(m0, mid[(k + 1) % sides], apex);
-      tri(a1, a0, under); // underside, seen from below
+      if (i < 2) tri(a1, a0, under); // underside of the low tiers, seen from below
     }
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));

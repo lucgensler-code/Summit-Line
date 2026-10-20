@@ -18,7 +18,8 @@ export function GameCanvas() {
       dpr={1}
       gl={{ antialias: true, powerPreference: 'high-performance' }}
       camera={{ fov: 60, near: 0.2, far: 9000, position: [600, 300, 600] }}
-      onCreated={({ gl }) => {
+      onCreated={({ gl, scene }) => {
+        (window as unknown as { __summitScene: THREE.Scene }).__summitScene = scene;
         gl.toneMapping = THREE.ACESFilmicToneMapping;
         gl.toneMappingExposure = 1.02; // v0.6: a touch lower so snow keeps its shading
         (window as unknown as { __summitGL: THREE.WebGLRenderer }).__summitGL = gl;

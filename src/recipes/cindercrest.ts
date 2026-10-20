@@ -29,19 +29,19 @@ export type KitItem =
 //  Trees
 // --------------------------------------------------------------------------------------------
 const douglasFir: TreeSettings = {
-  form: 'conifer', height: 13, tiers: 7, width: 0.27, taper: 1.05, droop: 0.35, irregularity: 0.7, sides: 7,
+  form: 'conifer', height: 13, tiers: 6, width: 0.27, taper: 1.05, droop: 0.35, irregularity: 0.7, sides: 6,
   trunkHeight: 0.16, leaderBend: 0, foliage: ['#2d4632', '#4d6a43'], bark: '#5e4030', snow: 0,
 };
 const westernHemlock: TreeSettings = {
-  form: 'conifer', height: 12, tiers: 8, width: 0.25, taper: 1.15, droop: 0.65, irregularity: 0.8, sides: 7,
+  form: 'conifer', height: 12, tiers: 6, width: 0.25, taper: 1.15, droop: 0.65, irregularity: 0.8, sides: 6,
   trunkHeight: 0.12, leaderBend: 0.9, foliage: ['#294234', '#46653f'], bark: '#58402f', snow: 0,
 };
 const mountainHemlock: TreeSettings = {
-  form: 'conifer', height: 10, tiers: 7, width: 0.27, taper: 1.0, droop: 0.75, irregularity: 0.9, sides: 7,
+  form: 'conifer', height: 10, tiers: 6, width: 0.27, taper: 1.0, droop: 0.75, irregularity: 0.9, sides: 6,
   trunkHeight: 0.08, leaderBend: 0.7, foliage: ['#2b4038', '#4f6a4c'], bark: '#5a4436', snow: 0,
 };
 const subalpineFir: TreeSettings = {
-  form: 'conifer', height: 10, tiers: 8, width: 0.17, taper: 1.35, droop: 0.4, irregularity: 0.6, sides: 6,
+  form: 'conifer', height: 10, tiers: 6, width: 0.17, taper: 1.35, droop: 0.4, irregularity: 0.6, sides: 6,
   trunkHeight: 0.06, leaderBend: 0, foliage: ['#2c4440', '#4c6a58'], bark: '#6a5444', snow: 0,
 };
 const whitebarkPine: TreeSettings = {
@@ -71,37 +71,37 @@ const GREY = ['#8c857e', '#7d7670', '#9a9189'];
 // --------------------------------------------------------------------------------------------
 export const ITEMS = {
   // trees ---------------------------------------------------------------------------------------
-  douglasFir: { kind: 'tree', settings: douglasFir, variants: 3, near: 150, hide: Infinity },
-  westernHemlock: { kind: 'tree', settings: westernHemlock, variants: 2, near: 150, hide: Infinity },
-  mountainHemlock: { kind: 'tree', settings: mountainHemlock, variants: 3, near: 150, hide: Infinity },
-  subalpineFir: { kind: 'tree', settings: subalpineFir, variants: 3, near: 150, hide: Infinity },
-  mountainHemlockSnowy: { kind: 'tree', settings: snowy(mountainHemlock), variants: 2, near: 150, hide: Infinity },
-  subalpineFirSnowy: { kind: 'tree', settings: snowy(subalpineFir), variants: 2, near: 150, hide: Infinity },
-  whitebarkPine: { kind: 'tree', settings: whitebarkPine, variants: 3, near: 150, hide: Infinity },
+  douglasFir: { kind: 'tree', settings: douglasFir, variants: 2, near: 55, hide: Infinity },
+  westernHemlock: { kind: 'tree', settings: westernHemlock, variants: 2, near: 55, hide: Infinity },
+  mountainHemlock: { kind: 'tree', settings: mountainHemlock, variants: 2, near: 55, hide: Infinity },
+  subalpineFir: { kind: 'tree', settings: subalpineFir, variants: 2, near: 55, hide: Infinity },
+  mountainHemlockSnowy: { kind: 'tree', settings: snowy(mountainHemlock), variants: 2, near: 55, hide: Infinity },
+  subalpineFirSnowy: { kind: 'tree', settings: snowy(subalpineFir), variants: 2, near: 55, hide: Infinity },
+  whitebarkPine: { kind: 'tree', settings: whitebarkPine, variants: 2, near: 55, hide: Infinity },
   snag: { kind: 'tree', settings: snag, variants: 2, near: 140, hide: 600 },
 
   // rocks ---------------------------------------------------------------------------------------
-  forestBoulder: { kind: 'rock', settings: rock({ detail: 2, colors: FOREST_STONE, moss: 0.85, lichen: 0.3 }), variants: 3, near: 120, hide: 700, collide: 0.8 },
-  meadowBoulder: { kind: 'rock', settings: rock({ detail: 2, colors: GREY, moss: 0.25, lichen: 0.5 }), variants: 3, near: 120, hide: 900, collide: 0.8 },
-  basaltBoulder: { kind: 'rock', settings: rock({ detail: 2, colors: BASALT, cuts: 9, angularity: 0.8, cracks: 0.6, lichen: 0.15 }), variants: 3, near: 130, hide: 900, collide: 0.8 },
-  cinderRock: { kind: 'rock', settings: rock({ detail: 1, colors: CINDER, lumpiness: 0.28, cuts: 5, angularity: 0.5, lichen: 0.05 }), variants: 3, near: 80, hide: 260 },
-  talus: { kind: 'rock', settings: rock({ detail: 1, colors: BASALT, cuts: 8, angularity: 0.85, shape: [1.2, 0.85, 1], lichen: 0.1 }), variants: 3, near: 70, hide: 220 },
-  snowRock: { kind: 'rock', settings: rock({ detail: 2, colors: BASALT, cuts: 8, angularity: 0.75, snow: 0.8, lichen: 0 }), variants: 3, near: 130, hide: 900, collide: 0.8 },
-  outcrop: { kind: 'rock', settings: rock({ detail: 2, colors: BASALT, shape: [1.7, 1.15, 1.05], cuts: 9, angularity: 0.75, ledges: 0.7, cracks: 0.7, lichen: 0.12 }), variants: 3, near: 220, hide: Infinity, collide: 0.7 },
-  outcropSnowy: { kind: 'rock', settings: rock({ detail: 2, colors: BASALT, shape: [1.7, 1.15, 1.05], cuts: 9, angularity: 0.75, ledges: 0.7, cracks: 0.6, snow: 0.75 }), variants: 2, near: 220, hide: Infinity, collide: 0.7 },
+  forestBoulder: { kind: 'rock', settings: rock({ detail: 1, colors: FOREST_STONE, moss: 0.85, lichen: 0.3 }), variants: 2, near: 120, hide: 700, collide: 0.8 },
+  meadowBoulder: { kind: 'rock', settings: rock({ detail: 1, colors: GREY, moss: 0.25, lichen: 0.5 }), variants: 2, near: 120, hide: 900, collide: 0.8 },
+  basaltBoulder: { kind: 'rock', settings: rock({ detail: 1, colors: BASALT, cuts: 9, angularity: 0.8, cracks: 0.6, lichen: 0.15 }), variants: 2, near: 130, hide: 900, collide: 0.8 },
+  cinderRock: { kind: 'rock', settings: rock({ detail: 1, colors: CINDER, lumpiness: 0.28, cuts: 5, angularity: 0.5, lichen: 0.05 }), variants: 2, near: 80, hide: 260 },
+  talus: { kind: 'rock', settings: rock({ detail: 1, colors: BASALT, cuts: 8, angularity: 0.85, shape: [1.2, 0.85, 1], lichen: 0.1 }), variants: 2, near: 70, hide: 220 },
+  snowRock: { kind: 'rock', settings: rock({ detail: 1, colors: BASALT, cuts: 8, angularity: 0.75, snow: 0.8, lichen: 0 }), variants: 2, near: 130, hide: 900, collide: 0.8 },
+  outcrop: { kind: 'rock', settings: rock({ detail: 2, colors: BASALT, shape: [1.7, 1.15, 1.05], cuts: 9, angularity: 0.75, ledges: 0.7, cracks: 0.7, lichen: 0.12 }), variants: 2, near: 160, hide: Infinity, collide: 0.7 },
+  outcropSnowy: { kind: 'rock', settings: rock({ detail: 2, colors: BASALT, shape: [1.7, 1.15, 1.05], cuts: 9, angularity: 0.75, ledges: 0.7, cracks: 0.6, snow: 0.75 }), variants: 2, near: 160, hide: Infinity, collide: 0.7 },
 
   // ground cover --------------------------------------------------------------------------------
-  grass: { kind: 'grass', settings: { blades: 13, height: 0.85, spread: 0.6, width: 0.065, base: '#6f7a40', tip: '#c9c47e', dry: 0.3 }, variants: 2, hide: 65 },
-  forestGrass: { kind: 'grass', settings: { blades: 10, height: 0.7, spread: 0.55, width: 0.06, base: '#4a6534', tip: '#9cb062', dry: 0.1 }, variants: 2, hide: 70 },
-  alpineGrass: { kind: 'grass', settings: { blades: 9, height: 0.55, spread: 0.65, width: 0.055, base: '#5e6a3c', tip: '#c2b47a', dry: 0.5 }, variants: 2, hide: 70 },
-  lupine: { kind: 'flower', settings: { grass: { blades: 6, height: 0.35, spread: 0.6, width: 0.04, base: '#47613a', tip: '#7d9655', dry: 0 }, stalks: 4, head: 'spike', colors: ['#6f68c8', '#8a72d0', '#5b5bb8'], stalkHeight: 0.55 }, variants: 2, hide: 80 },
-  paintbrush: { kind: 'flower', settings: { grass: { blades: 6, height: 0.3, spread: 0.5, width: 0.035, base: '#4c6438', tip: '#88a058', dry: 0.1 }, stalks: 4, head: 'brush', colors: ['#e0503a', '#ef6a3c', '#d83f4a'], stalkHeight: 0.42 }, variants: 2, hide: 80 },
-  aster: { kind: 'flower', settings: { grass: { blades: 5, height: 0.28, spread: 0.5, width: 0.03, base: '#4c6438', tip: '#8aa05a', dry: 0.2 }, stalks: 5, head: 'daisy', colors: ['#c9b8e8', '#f2f0e6', '#e9d36a'], stalkHeight: 0.32 }, variants: 2, hide: 70 },
-  beargrass: { kind: 'flower', settings: { grass: { blades: 16, height: 0.7, spread: 0.9, width: 0.025, base: '#3f5a33', tip: '#93a35e', dry: 0.15 }, stalks: 1, head: 'club', colors: ['#f3ecd2'], stalkHeight: 1.2 }, variants: 2, hide: 110 },
-  heather: { kind: 'shrub', settings: { form: 'heather', size: 1.0, leaf: ['#2f4a2c', '#5c7a42'], accent: '#d76a9c', accentAmount: 0.35 }, variants: 3, hide: 75 },
-  huckleberry: { kind: 'shrub', settings: { form: 'huckleberry', size: 1.1, leaf: ['#3e5e2e', '#6f8c3e'], accent: '#a8452e', accentAmount: 0.25 }, variants: 3, hide: 90 },
+  grass: { kind: 'grass', settings: { blades: 10, height: 0.85, spread: 0.6, width: 0.065, base: '#6f7a40', tip: '#c9c47e', dry: 0.3 }, variants: 2, hide: 40 },
+  forestGrass: { kind: 'grass', settings: { blades: 8, height: 0.7, spread: 0.55, width: 0.06, base: '#4a6534', tip: '#9cb062', dry: 0.1 }, variants: 2, hide: 55 },
+  alpineGrass: { kind: 'grass', settings: { blades: 9, height: 0.55, spread: 0.65, width: 0.055, base: '#5e6a3c', tip: '#c2b47a', dry: 0.5 }, variants: 2, hide: 55 },
+  lupine: { kind: 'flower', settings: { grass: { blades: 4, height: 0.35, spread: 0.6, width: 0.04, base: '#47613a', tip: '#7d9655', dry: 0 }, stalks: 3, head: 'spike', colors: ['#6f68c8', '#8a72d0', '#5b5bb8'], stalkHeight: 0.55 }, variants: 2, hide: 32 },
+  paintbrush: { kind: 'flower', settings: { grass: { blades: 4, height: 0.3, spread: 0.5, width: 0.035, base: '#4c6438', tip: '#88a058', dry: 0.1 }, stalks: 3, head: 'brush', colors: ['#e0503a', '#ef6a3c', '#d83f4a'], stalkHeight: 0.42 }, variants: 2, hide: 32 },
+  aster: { kind: 'flower', settings: { grass: { blades: 4, height: 0.28, spread: 0.5, width: 0.03, base: '#4c6438', tip: '#8aa05a', dry: 0.2 }, stalks: 4, head: 'daisy', colors: ['#c9b8e8', '#f2f0e6', '#e9d36a'], stalkHeight: 0.32 }, variants: 2, hide: 32 },
+  beargrass: { kind: 'flower', settings: { grass: { blades: 16, height: 0.7, spread: 0.9, width: 0.025, base: '#3f5a33', tip: '#93a35e', dry: 0.15 }, stalks: 1, head: 'club', colors: ['#f3ecd2'], stalkHeight: 1.2 }, variants: 2, hide: 80 },
+  heather: { kind: 'shrub', settings: { form: 'heather', size: 1.0, leaf: ['#2f4a2c', '#5c7a42'], accent: '#d76a9c', accentAmount: 0.35 }, variants: 3, hide: 55 },
+  huckleberry: { kind: 'shrub', settings: { form: 'huckleberry', size: 1.1, leaf: ['#3e5e2e', '#6f8c3e'], accent: '#a8452e', accentAmount: 0.25 }, variants: 3, hide: 65 },
   cushion: { kind: 'shrub', settings: { form: 'cushion', size: 0.75, leaf: ['#5b6a44', '#8e9a68'], accent: '#e6a7c5', accentAmount: 0.4 }, variants: 2, hide: 60 },
-  fern: { kind: 'fern', settings: { fronds: 10, length: 1.35, arch: 0.6, color: ['#4f7f36', '#93bd5a'] }, variants: 2, hide: 80 },
+  fern: { kind: 'fern', settings: { fronds: 10, length: 1.35, arch: 0.6, color: ['#4f7f36', '#93bd5a'] }, variants: 2, hide: 60 },
 } satisfies Record<string, KitItem>;
 
 export type ItemId = keyof typeof ITEMS;
