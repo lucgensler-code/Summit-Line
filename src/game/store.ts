@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { startAudio } from './audio';
 import { clearInput } from './input';
-import { addRecord, type BestKind, type ExpeditionRecord } from './records';
+import { addRecord, loadRecords, type BestKind, type ExpeditionRecord } from './records';
 import { computeScore, type Score } from './scoring';
 import { createNav, type NavState, type SafePoint } from './navigation';
 import { localBoard, routeKey } from './leaderboard';
@@ -341,12 +341,8 @@ export const useGame = create<GameStore>((set, get) => ({
     const prevBest = localBoard.top(rk, 'score', 1)[0]?.score ?? 0;
     const qualifies = localBoard.qualifies(rk, score.total);
     const bests = addRecord(rec, ACTIVE_ROUTE.miles);
-    let climbNumber = 1;
-    try {
-      climbNumber = JSON.parse(localStorage.getItem('summitline.expeditions.v1') || '[]').length;
-    } catch {
-      /* ignore */
-    }
+    // (v0.10: count through loadRecords, which tolerates a damaged or missing save)
+    const climbNumber = Math.max(1, loadRecords().length);
     set({
       phase: 'summit',
       viewMode: false,

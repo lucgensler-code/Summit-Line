@@ -2,7 +2,7 @@ import { useFrame } from '@react-three/fiber';
 import { useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { getLandmarks, type Landmark } from '../game/landmarks';
-import { LAKE, getWorld, heightAt, snowCover } from '../game/world';
+import { LAKE, getWorld, heightAt, snowCover, summitCairnSpot } from '../game/world';
 import { merge, tint } from './Vegetation';
 import { rockGeometry } from '../kit/rocks';
 import { mulberry32 } from '../game/noise';
@@ -206,6 +206,7 @@ function SummitMarker() {
   const W = getWorld();
   const flag = useRef<THREE.Mesh>(null);
   const { x, y, z } = W.summit;
+  const spot = useMemo(() => summitCairnSpot(W), [W]);
   // v0.9: a broad summit cairn about chest high — a pile of mixed local stones in settling
   // layers, wider than tall — with a weathered pole wedged into its real top and a small flag.
   const { cairn, top } = useMemo(() => {
@@ -257,7 +258,7 @@ function SummitMarker() {
   const poleLen = 1.5;
   const poleBase = top - 0.35; // wedged between the top stones
   return (
-    <group position={[x + 1.8, heightAt(x + 1.8, z) - 0.05, z]}>
+    <group position={[spot.x, heightAt(spot.x, spot.z) - 0.05, spot.z]}>
       <mesh geometry={cairn} castShadow receiveShadow>
         {/* faint emissive: undersides pick up light bounced off the snow instead of going black */}
         <meshStandardMaterial vertexColors flatShading roughness={0.95} emissive="#3a3d4a" emissiveIntensity={0.35} />
@@ -273,7 +274,7 @@ function SummitMarker() {
         </mesh>
       </group>
       {/* survey benchmark disk where the summit is tagged */}
-      <mesh position={[-1.8, y - heightAt(x + 1.8, z) + 0.11, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+      <mesh position={[x - spot.x, y - heightAt(spot.x, spot.z) + 0.11, z - spot.z]} rotation={[-Math.PI / 2, 0, 0]}>
         <circleGeometry args={[0.28, 20]} />
         <meshStandardMaterial color="#b88a3e" metalness={0.8} roughness={0.35} emissive="#3a2a10" />
       </mesh>

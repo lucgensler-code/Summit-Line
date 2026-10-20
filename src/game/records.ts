@@ -43,7 +43,8 @@ export function loadRecords(): ExpeditionRecord[] {
   try {
     const raw = localStorage.getItem(KEY);
     const arr = raw ? (JSON.parse(raw) as ExpeditionRecord[]) : [];
-    return Array.isArray(arr) ? arr : [];
+    // v0.10: skip damaged entries instead of letting them reach the screens
+    return Array.isArray(arr) ? arr.filter((r) => !!r && typeof r === 'object' && Number.isFinite(r.realSeconds) && Number.isFinite(r.gameSeconds)) : [];
   } catch {
     return [];
   }

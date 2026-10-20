@@ -97,7 +97,8 @@ interface LocalRow extends Omit<LbEntry, 'mine'> {
 function readJson<T>(key: string): T[] {
   try {
     const v = JSON.parse(localStorage.getItem(key) || '[]');
-    return Array.isArray(v) ? v : [];
+    // v0.10: skip damaged rows (a broken save must not break the board)
+    return Array.isArray(v) ? v.filter((r) => !!r && typeof r === 'object' && Number.isFinite((r as { score?: number }).score)) : [];
   } catch {
     return [];
   }

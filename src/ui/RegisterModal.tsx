@@ -19,7 +19,7 @@ const KEY = 'summitline.register.v1';
 function loadEntries(): RegisterEntry[] {
   try {
     const v = JSON.parse(localStorage.getItem(KEY) || '[]');
-    return Array.isArray(v) ? v : [];
+    return Array.isArray(v) ? v.filter((r) => !!r && typeof r === 'object' && typeof r.name === 'string') : [];
   } catch {
     return [];
   }
