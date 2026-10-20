@@ -5,6 +5,8 @@ import { runtime, useGame } from '../game/store';
 import { getWorld, type Gem } from '../game/world';
 import { gemBaseKitGeometry, gemKitGeometry } from '../kit/catalogue';
 import { CINDERCREST } from '../recipes';
+import { smoothstep } from '../game/noise';
+import { alphaTexture, dotTexture } from './textures';
 
 const TOUCH = typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches;
 
@@ -14,39 +16,23 @@ const STYLE = {
 } as const;
 
 function glowTexture() {
-  const c = document.createElement('canvas');
-  c.width = c.height = 64;
-  const ctx = c.getContext('2d')!;
-  const g = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
-  g.addColorStop(0, 'rgba(255,255,255,1)');
-  g.addColorStop(0.25, 'rgba(255,255,255,0.55)');
-  g.addColorStop(1, 'rgba(255,255,255,0)');
-  ctx.fillStyle = g;
-  ctx.fillRect(0, 0, 64, 64);
-  const tex = new THREE.CanvasTexture(c);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  return tex;
+  // Radial glow: 1 at the centre, 0.55 a quarter of the way out, fading to 0 at the edge.
+  return alphaTexture(64, 64, (u, v) => {
+    const r = Math.min(1, Math.hypot(u - 0.5, v - 0.5) * 2);
+    return r < 0.25 ? 1 - (r / 0.25) * 0.45 : 0.55 * (1 - (r - 0.25) / 0.75);
+  });
 }
 
 /** Four-point star for the occasional sparkle. */
 function starTexture() {
-  const c = document.createElement('canvas');
-  c.width = c.height = 64;
-  const ctx = c.getContext('2d')!;
-  const g = ctx.createRadialGradient(32, 32, 0, 32, 32, 30);
-  g.addColorStop(0, 'rgba(255,255,255,1)');
-  g.addColorStop(1, 'rgba(255,255,255,0)');
-  ctx.fillStyle = g;
-  ctx.beginPath();
-  ctx.moveTo(32, 2);
-  ctx.quadraticCurveTo(35, 29, 62, 32);
-  ctx.quadraticCurveTo(35, 35, 32, 62);
-  ctx.quadraticCurveTo(29, 35, 2, 32);
-  ctx.quadraticCurveTo(29, 29, 32, 2);
-  ctx.fill();
-  const tex = new THREE.CanvasTexture(c);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  return tex;
+  return alphaTexture(64, 64, (u, v) => {
+    const x = Math.abs(u - 0.5) * 2;
+    const y = Math.abs(v - 0.5) * 2;
+    // Concave four-point star: inside where sqrt(x) + sqrt(y) < 1, glowing toward the centre.
+    const s = Math.sqrt(x) + Math.sqrt(y);
+    const inside = 1 - smoothstep(0.85, 1.0, s);
+    return inside * (1 - Math.min(1, Math.hypot(x, y)));
+  });
 }
 
 function GemItem({ gem, cluster, base, mats, glow, star, beamGeo }: { gem: Gem; cluster: Record<'green' | 'red', THREE.BufferGeometry>; base: THREE.BufferGeometry; mats: Record<string, THREE.Material>; glow: Record<string, THREE.SpriteMaterial>; star: THREE.SpriteMaterial; beamGeo: THREE.BufferGeometry }) {
@@ -234,10 +220,10 @@ export function Gems() {
         <GemItem key={g.id} gem={g} cluster={cluster} base={base} mats={mats} glow={glow} star={star} beamGeo={beamGeo} />
       ))}
       <points geometry={sparkGeo} frustumCulled={false}>
-        <pointsMaterial size={0.09} vertexColors transparent opacity={0.8} blending={THREE.AdditiveBlending} depthWrite={false} />
+        <pointsMaterial map={dotTexture()} size={0.14} vertexColors transparent opacity={0.8} blending={THREE.AdditiveBlending} depthWrite={false} />
       </points>
       <points geometry={pool.geo} frustumCulled={false}>
-        <pointsMaterial size={0.22} vertexColors transparent blending={THREE.AdditiveBlending} depthWrite={false} />
+        <pointsMaterial map={dotTexture()} size={0.3} vertexColors transparent blending={THREE.AdditiveBlending} depthWrite={false} />
       </points>
     </group>
   );

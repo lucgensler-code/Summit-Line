@@ -124,15 +124,31 @@ function Chunked({
   const lod = near < Infinity || hide < Infinity;
   const nearMeshes = useRef<(THREE.InstancedMesh | null)[]>([]);
   const farMeshes = useRef<(THREE.InstancedMesh | null)[]>([]);
+  // Current level per chunk (0 near, 1 far, 2 hidden). v0.8: a chunk only changes level once it
+  // is clearly past a threshold, so one sitting right at the edge can't flip every frame.
+  const level = useRef<{ of: unknown; lv: number[] }>({ of: null, lv: [] });
   useFrame(({ camera }) => {
     if (!lod) return;
     const pad = cell * 0.71;
+    if (level.current.of !== chunks) level.current = { of: chunks, lv: [] };
+    const lv = level.current.lv;
+    const margin = (t: number) => Math.max(4, t * 0.06);
     for (let i = 0; i < chunks.length; i++) {
       const d = camera.position.distanceTo(chunks[i].c) - pad;
+      const want = d < near ? 0 : d < hide ? 1 : 2;
+      const cur = lv[i];
+      let next = want;
+      if (cur !== undefined && want !== cur) {
+        // Only move once the distance is clear of the boundary between the two levels.
+        const edge = Math.min(want, cur) === 0 && Math.max(want, cur) === 1 ? near : hide;
+        if (Math.abs(d - edge) < margin(edge)) next = cur;
+      }
+      if (next === cur) continue;
+      lv[i] = next;
       const nm = nearMeshes.current[i];
       const fm = farMeshes.current[i];
-      if (nm) nm.visible = d < near && d < hide;
-      if (fm) fm.visible = d >= near && d < hide;
+      if (nm) nm.visible = next === 0;
+      if (fm) fm.visible = next === 1;
     }
   });
   return (

@@ -16,8 +16,15 @@ if (qParams?.has('lq')) {
   quality.mist = false;
 }
 
+/**
+ * `?debug` (v0.8): live switches for the layers most likely to misbehave on a given GPU, so a
+ * glitch can be pinned down on the device itself. `dpr` 0 = leave it to the governor; `hold`
+ * stops the governor from stepping quality down while testing.
+ */
+export const debugFlags = { on: !!qParams?.has('debug'), bloom: true, shadows: true, dpr: 0, hold: false };
+
 /** Live numbers for the optional FPS overlay (F3 or ?fps). Written by the governor, read by the DOM. */
-export const perfStats = { fps: 0, p95: 0, calls: 0, tris: 0, dpr: 1, tier: 0 };
+export const perfStats = { fps: 0, p95: 0, calls: 0, tris: 0, dpr: 1, tier: 0, near: 0.2 };
 
 const isTouch = () => window.matchMedia('(pointer: coarse)').matches;
 
@@ -41,7 +48,13 @@ export function PerfGovernor() {
     perfStats.dpr = dpr;
   }, [setDpr]);
 
+  const dbgDpr = useRef(0);
   useFrame(() => {
+    if (debugFlags.dpr && debugFlags.dpr !== dbgDpr.current) {
+      dbgDpr.current = debugFlags.dpr;
+      setDpr(debugFlags.dpr);
+      perfStats.dpr = debugFlags.dpr;
+    }
     const now = performance.now();
     const ft = now - last.current;
     last.current = now;
@@ -64,7 +77,7 @@ export function PerfGovernor() {
     perfStats.calls = gl.info.render.calls;
     perfStats.tris = gl.info.render.triangles;
     perfStats.tier = tier.current;
-    if (now < grace.current || document.hidden || PIN_HQ) return;
+    if (now < grace.current || document.hidden || PIN_HQ || debugFlags.hold || debugFlags.dpr) return;
     if (perfStats.fps < 48 && tier.current < 4) {
       tier.current++;
       grace.current = now + 4000;
@@ -105,7 +118,7 @@ export function PrepMode() {
   useEffect(() => {
     const prep = phase === 'prep';
     const cam = camera as THREE.PerspectiveCamera;
-    cam.near = prep ? 4 : 0.2;
+    cam.near = prep ? 4 : 0.4;
     cam.updateProjectionMatrix();
     gl.shadowMap.autoUpdate = !prep;
     gl.shadowMap.needsUpdate = true;
@@ -149,4 +162,48 @@ export function FpsOverlay() {
     };
   }, []);
   return <div ref={el} className="fps-overlay" hidden />;
+}
+
+/** `?debug` panel: toggles for post-processing, glow, shadows, mist and render scale. */
+export function DebugPanel() {
+  const el = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!debugFlags.on || !el.current) return;
+    const root = el.current;
+    const stat = document.createElement('div');
+    const row = (label: string, get: () => boolean, set: (v: boolean) => void) => {
+      const l = document.createElement('label');
+      const c = document.createElement('input');
+      c.type = 'checkbox';
+      c.checked = get();
+      c.onchange = () => set(c.checked);
+      l.append(c, ' ' + label);
+      root.append(l);
+      return c;
+    };
+    root.append(stat);
+    const boxes = [
+      row('Post (glow + grade + FXAA)', () => quality.post, (v) => (quality.post = v)),
+      row('Glow', () => debugFlags.bloom, (v) => (debugFlags.bloom = v)),
+      row('Shadows', () => debugFlags.shadows, (v) => (debugFlags.shadows = v)),
+      row('Valley mist', () => quality.mist, (v) => (quality.mist = v)),
+      row('Hold quality (no auto steps)', () => debugFlags.hold, (v) => (debugFlags.hold = v)),
+    ];
+    const sel = document.createElement('select');
+    for (const v of [0, 0.75, 1, 1.25, 1.5, 2]) {
+      const o = document.createElement('option');
+      o.value = String(v);
+      o.textContent = v ? `Render scale ${v}` : 'Render scale: auto';
+      sel.append(o);
+    }
+    sel.onchange = () => (debugFlags.dpr = Number(sel.value));
+    root.append(sel);
+    const id = setInterval(() => {
+      stat.textContent = `${perfStats.fps.toFixed(0)} fps · p95 ${perfStats.p95.toFixed(1)} ms · ${perfStats.calls} draws · ${(perfStats.tris / 1000).toFixed(0)}k tris · dpr ${perfStats.dpr.toFixed(2)} · tier ${perfStats.tier} · near ${perfStats.near.toFixed(2)}`;
+      boxes[0].checked = quality.post;
+      boxes[3].checked = quality.mist;
+    }, 500);
+    return () => clearInterval(id);
+  }, []);
+  return debugFlags.on ? <div ref={el} className="debug-panel" onPointerDown={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()} /> : null;
 }

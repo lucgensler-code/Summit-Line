@@ -8,7 +8,8 @@ import { runtime, useGame } from '../game/store';
 import { HALF, elevationFt, farHeight, getWorld, heightAt } from '../game/world';
 import { mergeGeometries, mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { STYLE, hazeMaterial } from './style';
-import { quality } from './Performance';
+import { debugFlags, quality } from './Performance';
+import { alphaTexture, dotTexture } from './textures';
 
 // ---------------------------------------------------------------------------------------------
 // Time-of-day palette.
@@ -282,8 +283,12 @@ export function Atmosphere() {
       s.shadow.intensity = 0.72 - elevBoostOf(p) * 0.17;
       s.color.copy(pal.sun);
       s.intensity = pal.sunI;
+      // v0.8: snap the shadow camera to whole shadow-map texels (in the light's own view), so
+      // shadow edges stay put instead of crawling and shimmering as the climber moves.
+      snapToShadowTexels(focus, dir, (2 * 60) / 2048);
       s.position.copy(focus).addScaledVector(dir, 160);
       target.position.copy(focus);
+      s.castShadow = debugFlags.shadows;
       s.target = target;
     }
     if (hemi.current) {
@@ -344,6 +349,21 @@ export function Atmosphere() {
     </>
   );
 }
+
+const _lq = new THREE.Quaternion();
+const _lm = new THREE.Matrix4();
+const _lv = new THREE.Vector3();
+/** Round `p` to the shadow-map texel grid of a light shining along `dir` (in place). */
+function snapToShadowTexels(p: THREE.Vector3, dir: THREE.Vector3, texel: number) {
+  _lm.lookAt(dir, ORIGIN, UP);
+  _lq.setFromRotationMatrix(_lm);
+  _lv.copy(p).applyQuaternion(_lq.clone().invert());
+  _lv.x = Math.round(_lv.x / texel) * texel;
+  _lv.y = Math.round(_lv.y / texel) * texel;
+  p.copy(_lv.applyQuaternion(_lq));
+}
+const ORIGIN = new THREE.Vector3();
+const UP = new THREE.Vector3(0, 1, 0);
 
 // ---------------------------------------------------------------------------------------------
 // Distant mountains and ground beyond the playable map (v0.6).
@@ -559,27 +579,15 @@ export function DistantLands() {
 // playable map, between the ridgelines. Cheap unlit transparent rings; dropped on low quality.
 
 function mistTexture() {
-  const n = 256;
-  const cv = document.createElement('canvas');
-  cv.width = cv.height = n;
-  const ctx = cv.getContext('2d')!;
-  const img = ctx.createImageData(n, n);
-  for (let y = 0; y < n; y++)
-    for (let x = 0; x < n; x++) {
-      const u = (x / (n - 1)) * 2 - 1;
-      const v = (y / (n - 1)) * 2 - 1;
-      const r = Math.hypot(u, v); // 0 centre … 1 outer edge of the ring geometry
-      const inner = smoothstep(0.19, 0.3, r);
-      const outer = 1 - smoothstep(0.72, 1.0, r);
-      const patch = 0.55 + 0.45 * (fbm(u * 6, v * 6, 3, 515) * 0.5 + 0.5);
-      const a = inner * outer * patch;
-      const o = (y * n + x) * 4;
-      img.data[o] = img.data[o + 1] = img.data[o + 2] = 255;
-      img.data[o + 3] = Math.round(a * 255);
-    }
-  ctx.putImageData(img, 0, 0);
-  const tex = new THREE.CanvasTexture(cv);
-  return tex;
+  return alphaTexture(256, 256, (x, y) => {
+    const u = x * 2 - 1;
+    const v = y * 2 - 1;
+    const r = Math.hypot(u, v); // 0 centre … 1 outer edge of the ring geometry
+    const inner = smoothstep(0.19, 0.3, r);
+    const outer = 1 - smoothstep(0.72, 1.0, r);
+    const patch = 0.55 + 0.45 * (fbm(u * 6, v * 6, 3, 515) * 0.5 + 0.5);
+    return inner * outer * patch;
+  });
 }
 
 export function ValleyMist() {
@@ -664,32 +672,27 @@ function cloudLayer(count: number, seed: number, rMin: number, rMax: number, yMi
   return mergeGeometries(parts, false)!;
 }
 
-/** Soft wind-stretched wisps for the high layer (one shared canvas texture). */
+/** Soft wind-stretched wisps for the high layer (one shared texture, built from pixels). */
 function wispTexture() {
-  const cv = document.createElement('canvas');
-  cv.width = 256;
-  cv.height = 64;
-  const ctx = cv.getContext('2d')!;
   const rand = mulberry32(17);
-  for (let i = 0; i < 14; i++) {
+  const blobs = Array.from({ length: 14 }, () => {
     const x = 30 + rand() * 196;
     const y = 26 + (rand() - 0.5) * 14;
     const rx = 26 + rand() * 40;
     const ry = 8 + rand() * 9;
-    const g = ctx.createRadialGradient(x, y, 0, x, y, rx);
-    g.addColorStop(0, 'rgba(255,255,255,0.42)');
-    g.addColorStop(1, 'rgba(255,255,255,0)');
-    ctx.save();
-    ctx.translate(x, y);
-    ctx.scale(1, ry / rx);
-    ctx.translate(-x, -y);
-    ctx.fillStyle = g;
-    ctx.fillRect(0, 0, 256, 64);
-    ctx.restore();
-  }
-  const tex = new THREE.CanvasTexture(cv);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  return tex;
+    return { x, y, rx, ry };
+  });
+  return alphaTexture(256, 64, (u, v) => {
+    const px = u * 256;
+    const py = v * 64;
+    // Same look as the old canvas version: overlapping soft ellipses, each 42% at its centre.
+    let keep = 1;
+    for (const b of blobs) {
+      const r = Math.hypot((px - b.x) / b.rx, (py - b.y) / b.ry);
+      if (r < 1) keep *= 1 - 0.42 * (1 - r);
+    }
+    return 1 - keep;
+  });
 }
 
 /**
@@ -746,6 +749,8 @@ export function Spindrift() {
     const seeds = new Float32Array(COUNT * 3);
     for (let i = 0; i < COUNT * 3; i++) seeds[i] = rand();
     geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    // Fewer motes on phones.
+    if (window.matchMedia('(pointer: coarse)').matches) geo.setDrawRange(0, Math.floor(COUNT * 0.55));
     return { geo, seeds };
   }, []);
   const matRef = useRef<THREE.PointsMaterial>(null);
@@ -762,7 +767,8 @@ export function Spindrift() {
     const phase = useGame.getState().phase;
     const amount = phase === 'prep' || phase === 'summit' ? 0 : (0.22 + high * 0.78) * zoomFade;
     matRef.current.opacity = amount * 0.85;
-    matRef.current.size = 0.06 + high * 0.04;
+    // v0.8: round soft dots (map) — larger than the old squares since the texture fades out.
+    matRef.current.size = 0.11 + high * 0.06;
     matRef.current.color.set(high > 0.5 ? '#ffffff' : '#fff1c4');
     pts.visible = amount > 0.01;
     if (!pts.visible || !p) return;
@@ -787,7 +793,7 @@ export function Spindrift() {
   });
   return (
     <points ref={ref} geometry={geo} frustumCulled={false}>
-      <pointsMaterial ref={matRef} color="#ffffff" size={0.09} transparent opacity={0} depthWrite={false} />
+      <pointsMaterial ref={matRef} map={dotTexture()} color="#ffffff" size={0.09} transparent opacity={0} depthWrite={false} />
     </points>
   );
 }

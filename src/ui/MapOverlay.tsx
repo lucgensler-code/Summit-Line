@@ -221,21 +221,25 @@ export function MapOverlay() {
       ctx.fillText(fmtDistance(mi, mi < 0.2 ? 2 : 1), 22 + px, size - 16);
       // north arrow
       ctx.save();
-      ctx.translate(size - 24, 28);
-      ctx.rotate(rot);
-      ctx.fillStyle = 'rgba(12,16,22,0.8)';
+      // v0.8: inset from the edge; the arrowhead sits above the letter instead of over it.
+      ctx.translate(size - 34, 36);
+      ctx.fillStyle = 'rgba(12,16,22,0.82)';
       ctx.beginPath();
-      ctx.arc(0, 0, 15, 0, Math.PI * 2);
+      ctx.arc(0, 0, 17, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.rotate(rot);
+      ctx.fillStyle = '#ff8a6a';
+      ctx.beginPath();
+      ctx.moveTo(0, -14);
+      ctx.lineTo(4.5, -7.5);
+      ctx.lineTo(-4.5, -7.5);
+      ctx.closePath();
       ctx.fill();
       ctx.fillStyle = '#fff';
       ctx.font = '700 11px system-ui, sans-serif';
       ctx.textAlign = 'center';
-      ctx.fillText('N', 0, -2);
-      ctx.beginPath();
-      ctx.moveTo(0, -13);
-      ctx.lineTo(4, -7);
-      ctx.lineTo(-4, -7);
-      ctx.fill();
+      ctx.textBaseline = 'middle';
+      ctx.fillText('N', 0, 3);
       ctx.restore();
       raf = requestAnimationFrame(draw);
     };

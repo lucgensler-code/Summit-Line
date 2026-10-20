@@ -8,6 +8,7 @@ import { clockHour, daylight } from '../game/sim';
 import { summitCinematic } from '../game/cinematic';
 import { CAM_DEFAULT, CAM_MIN, runtime, useGame } from '../game/store';
 import { heightAt } from '../game/world';
+import { perfStats } from './Performance';
 
 const COLORS = {
   jacket: '#d2602b',
@@ -400,6 +401,14 @@ export function CameraRig() {
     }
 
     const cam = runtime.cam;
+    // v0.8: a near plane as far out as the view allows. Depth precision depends on it heavily;
+    // at 0.2 m the distant forest fought the terrain for depth on some GPUs (flicker).
+    const wantNear = g.phase === 'summit' && p.summited ? clamp(Math.hypot(camera.position.x - p.x, camera.position.y - p.y, camera.position.z - p.z) * 0.05, 0.4, 2.5) : 0.4;
+    if (Math.abs(pc.near - wantNear) > 0.02) {
+      pc.near = wantNear;
+      pc.updateProjectionMatrix();
+    }
+    perfStats.near = pc.near;
     // Smooth zoom toward the pinch / scroll target.
     dist.current = lerp(dist.current, cam.dist, 1 - Math.exp(-dt * 8));
     const d = dist.current;
