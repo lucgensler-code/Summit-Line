@@ -9,7 +9,7 @@ import { Wildlife } from './Wildlife';
 import { Landmarks } from './Landmarks';
 import { CameraRig, Player } from './Player';
 import { FarTerrain, Terrain, Trail } from './Terrain';
-import { Ecology, Rocks, Shrubs, TrailMarkers, Trees, WindSway } from './Vegetation';
+import { Ecology, Rocks, Shrubs, TrailMarkers, Trees, ShaderWarmup, WindSway } from './Vegetation';
 
 export function GameCanvas() {
   return (
@@ -38,6 +38,7 @@ export function GameCanvas() {
       <Rocks />
       <Shrubs />
       <WindSway />
+      <ShaderWarmup />
       <Ecology />
       <TrailMarkers />
       <Landmarks />

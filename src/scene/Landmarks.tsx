@@ -4,7 +4,8 @@ import * as THREE from 'three';
 import { getLandmarks, type Landmark } from '../game/landmarks';
 import { LAKE, getWorld, heightAt, snowCover } from '../game/world';
 import { merge, tint } from './Vegetation';
-import { cairnGeometry, rockGeometry } from '../kit/rocks';
+import { rockGeometry } from '../kit/rocks';
+import { mulberry32 } from '../game/noise';
 import { runtime } from '../game/store';
 
 function SignPost({ lm }: { lm: Landmark }) {
@@ -185,24 +186,41 @@ function SummitMarker() {
   const W = getWorld();
   const flag = useRef<THREE.Mesh>(null);
   const { x, y, z } = W.summit;
-  // v0.8: a proper summit cairn from the scenery kit — a broad apron of stones with a balanced
-  // stack on top, light grey-brown with lichen (it used to read as a pile of dark cubes).
-  const cairn = useMemo(() => {
-    const STONE = ['#8f877f', '#7f7871', '#9b9188'];
+  // v0.9: a broad summit cairn about chest high — a pile of mixed local stones in settling
+  // layers, wider than tall — with a weathered pole wedged into its real top and a small flag.
+  const { cairn, top } = useMemo(() => {
+    const STONE = ['#958c83', '#857e77', '#a0968c'];
+    const rand = mulberry32(977);
     const parts: THREE.BufferGeometry[] = [];
-    for (let i = 0; i < 7; i++) {
-      const a = (i / 7) * Math.PI * 2 + 0.4;
-      const r = 1.05 + (i % 2) * 0.15;
-      const s = 0.62 + (i % 3) * 0.08;
-      const g = rockGeometry({ detail: 1, shape: [1.15, 0.75, 1], lumpiness: 0.16, cuts: 6, angularity: 0.6, ledges: 0, cracks: 0.2, colors: STONE, moss: 0, mossColor: '#5d7a3c', lichen: 0.35, lichenColor: '#b0a46e', snow: 0 }, 900 + i);
-      parts.push(g.scale(s, s, s).rotateY(a * 1.7).translate(Math.cos(a) * r, 0.05, Math.sin(a) * r));
-    }
-    parts.push(cairnGeometry({ stones: 5, baseWidth: 1.5, flatness: 0.62, colors: STONE, lichen: 0.35 }, 977));
-    return merge(parts.map((p) => {
+    const stone = (x: number, y: number, z: number, size: number, flat: number, seed: number) => {
+      const g = rockGeometry(
+        { detail: 1, shape: [1 + rand() * 0.3, flat, 0.9 + rand() * 0.25], lumpiness: 0.18, cuts: 6, angularity: 0.55, ledges: 0, cracks: 0.15, colors: STONE, moss: 0, mossColor: '#5d7a3c', lichen: 0.4, lichenColor: '#b4ab7c', snow: 0 },
+        seed,
+      );
+      parts.push(g.scale(size, size, size).rotateY(rand() * Math.PI * 2).translate(x, y, z));
+    };
+    // [ring radius, layer base height, stones in ring, stone size]
+    const layers: [number, number, number, number][] = [
+      [0.95, 0, 9, 0.5],
+      [0.55, 0.36, 6, 0.45],
+      [0.22, 0.7, 4, 0.38],
+    ];
+    let seed = 900;
+    for (const [r, y, n, size] of layers)
+      for (let k = 0; k < n; k++) {
+        const a = (k / n) * Math.PI * 2 + rand() * 0.4 + y * 3;
+        const rr = r * (0.85 + rand() * 0.3);
+        stone(Math.cos(a) * rr, y, Math.sin(a) * rr, size * (0.8 + rand() * 0.45), 0.7 + rand() * 0.3, seed++);
+      }
+    stone(0, 0.3, 0, 0.6, 0.8, seed++); // core
+    stone(0.04, 1.02, -0.03, 0.34, 0.75, seed++); // capstone
+    const g = merge(parts.map((p) => {
       const q = p.clone();
       q.deleteAttribute('normal');
       return q;
     }));
+    g.computeBoundingBox();
+    return { cairn: g, top: g.boundingBox!.max.y };
   }, []);
   useFrame(({ clock }) => {
     const f = flag.current;
@@ -211,26 +229,31 @@ function SummitMarker() {
     const t = clock.elapsedTime;
     for (let i = 0; i < pos.count; i++) {
       const px = pos.getX(i);
-      const k = (px + 0.6) / 1.2;
-      pos.setZ(i, Math.sin(t * 7 + px * 5) * 0.12 * k);
+      const k = (px + 0.3) / 0.6;
+      pos.setZ(i, Math.sin(t * 7 + px * 9) * 0.06 * k);
     }
     pos.needsUpdate = true;
   });
+  const poleLen = 1.5;
+  const poleBase = top - 0.35; // wedged between the top stones
   return (
-    <group position={[x + 1.8, heightAt(x + 1.8, z), z]}>
+    <group position={[x + 1.8, heightAt(x + 1.8, z) - 0.05, z]}>
       <mesh geometry={cairn} castShadow receiveShadow>
-        <meshStandardMaterial vertexColors flatShading />
+        {/* faint emissive: undersides pick up light bounced off the snow instead of going black */}
+        <meshStandardMaterial vertexColors flatShading roughness={0.95} emissive="#3a3d4a" emissiveIntensity={0.35} />
       </mesh>
-      <mesh position={[0, 2.4, 0]} castShadow>
-        <cylinderGeometry args={[0.035, 0.035, 2.4, 6]} />
-        <meshStandardMaterial color="#c9c9c9" metalness={0.6} roughness={0.3} />
-      </mesh>
-      <mesh ref={flag} position={[0.62, 3.3, 0]}>
-        <planeGeometry args={[1.2, 0.7, 10, 1]} />
-        <meshStandardMaterial color="#d8462b" side={THREE.DoubleSide} />
-      </mesh>
+      <group position={[0, poleBase, 0]} rotation={[0.04, 0, -0.05]}>
+        <mesh position={[0, poleLen / 2, 0]} castShadow>
+          <cylinderGeometry args={[0.022, 0.03, poleLen, 6]} />
+          <meshStandardMaterial color="#8a7c66" roughness={0.9} />
+        </mesh>
+        <mesh ref={flag} position={[0.31, poleLen - 0.2, 0]}>
+          <planeGeometry args={[0.6, 0.36, 10, 1]} />
+          <meshStandardMaterial color="#c9452e" side={THREE.DoubleSide} roughness={0.85} />
+        </mesh>
+      </group>
       {/* survey benchmark disk where the summit is tagged */}
-      <mesh position={[-1.8, y - heightAt(x + 1.8, z) + 0.06, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+      <mesh position={[-1.8, y - heightAt(x + 1.8, z) + 0.11, 0]} rotation={[-Math.PI / 2, 0, 0]}>
         <circleGeometry args={[0.28, 20]} />
         <meshStandardMaterial color="#b88a3e" metalness={0.8} roughness={0.35} emissive="#3a2a10" />
       </mesh>

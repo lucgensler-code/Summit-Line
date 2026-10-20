@@ -314,6 +314,8 @@ export function stepPlayer(p: PlayerState, l: Loadout, intent: MoveIntent, dt: n
     if (p.exhausted) target = Math.min(target, WALK_SPEED * 0.5 * factor);
   }
   p.speedFactor = factor;
+  // v0.9: a snappier first step from a standstill (the climber felt laggy to get going); the
+  // rest of the speed-up and the top speed are as before.
   const accel = target > p.speed ? 5 : 8;
   p.speed = lerp(p.speed, target, 1 - Math.exp(-dt * accel));
   if (target === 0 && p.speed < 0.05) p.speed = 0;

@@ -1,5 +1,5 @@
-import { useFrame } from '@react-three/fiber';
-import { useLayoutEffect, useMemo, useRef } from 'react';
+import { useFrame, useThree } from '@react-three/fiber';
+import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { cairnKitGeometry, isBentVariant, kitGeometry } from '../kit/catalogue';
@@ -81,6 +81,72 @@ function InstChunk({ items, geometry, material, place, cast, receive, meshRef }:
   );
 }
 
+const FADE_SECONDS = 0.45;
+const moveTo = (a: number, b: number, step: number) => (a < b ? Math.min(b, a + step) : Math.max(b, a - step));
+
+/**
+ * Dithered fade (v0.9): while a chunk fades, its mesh swaps to a variant of its material that
+ * discards a screen-space Bayer pattern of pixels. Near and far use complementary patterns, so
+ * during a near↔far swap every pixel shows exactly one of the two — no gap, no double image.
+ * Kept off the normal materials because `discard` defeats early depth testing.
+ */
+const BAYER = `float bayer4(vec2 p) {
+  ivec2 q = ivec2(mod(p, 4.0));
+  int i = q.x + q.y * 4;
+  int m[16] = int[16](0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5);
+  return (float(m[i]) + 0.5) / 16.0;
+}`;
+const ditherCache = new Map<THREE.Material, [THREE.Material, THREE.Material]>();
+function ditherMaterials(base: THREE.Material): [THREE.Material, THREE.Material] {
+  let pair = ditherCache.get(base);
+  if (pair) return pair;
+  const make = (far: boolean) => {
+    const m = base.clone();
+    const uFade = { value: 1 };
+    m.userData.uFade = uFade;
+    m.onBeforeCompile = (sh, r) => {
+      base.onBeforeCompile(sh, r);
+      sh.uniforms.uFade = uFade;
+      sh.fragmentShader = sh.fragmentShader
+        .replace('#include <common>', `#include <common>\nuniform float uFade;\n${BAYER}`)
+        .replace(
+          'void main() {',
+          far
+            ? 'void main() {\n  if (bayer4(gl_FragCoord.xy) < 1.0 - uFade) discard;'
+            : 'void main() {\n  if (bayer4(gl_FragCoord.xy) >= uFade) discard;',
+        );
+    };
+    const baseKey = base.customProgramCacheKey();
+    m.customProgramCacheKey = () => `${baseKey}|dither-${far ? 'far' : 'near'}`;
+    return m;
+  };
+  pair = [make(false), make(true)];
+  ditherCache.set(base, pair);
+  return pair;
+}
+
+/** Show a chunk mesh at fade `a` (0 hidden … 1 solid), using the dither material in between. */
+function applyFade(mesh: THREE.InstancedMesh | null, a: number, far: boolean) {
+  if (!mesh) return;
+  const base = (mesh.userData.baseMaterial ??= mesh.material) as THREE.Material;
+  mesh.visible = a > 0;
+  if (a <= 0 || a >= 1) {
+    if (mesh.material !== base) mesh.material = base;
+    return;
+  }
+  const mat = ditherMaterials(base)[far ? 1 : 0];
+  if (mesh.material !== mat) mesh.material = mat;
+  mesh.userData.fade = a;
+  // per-mesh fade value, uploaded just before this mesh draws
+  mesh.onBeforeRender = (_r, _s, _c, _g, m) => {
+    const u = (m as THREE.Material).userData.uFade as { value: number } | undefined;
+    if (u) {
+      u.value = mesh.userData.fade;
+      (m as THREE.Material & { uniformsNeedUpdate: boolean }).uniformsNeedUpdate = true;
+    }
+  };
+}
+
 /**
  * Splits scatter into spatial chunks so the camera and shadow frustums can cull them, and swaps
  * detail by distance: `geometry` within `near` of the camera, `far` (if given) beyond it, nothing
@@ -126,32 +192,40 @@ function Chunked({
   const lod = near < Infinity || hide < Infinity;
   const nearMeshes = useRef<(THREE.InstancedMesh | null)[]>([]);
   const farMeshes = useRef<(THREE.InstancedMesh | null)[]>([]);
-  // Current level per chunk (0 near, 1 far, 2 hidden). v0.8: a chunk only changes level once it
-  // is clearly past a threshold, so one sitting right at the edge can't flip every frame.
-  const level = useRef<{ of: unknown; lv: number[] }>({ of: null, lv: [] });
-  useFrame(({ camera }) => {
+  // Per chunk: current level (0 near, 1 far, 2 hidden) and the fade-in progress of each mesh.
+  // v0.8: a chunk only changes level once it is clearly past a threshold, so one sitting right at
+  // the edge can't flip every frame. v0.9: level changes cross-fade with a dither pattern over a
+  // fraction of a second instead of popping (the dither material is only used while fading).
+  const state = useRef<{ of: unknown; lv: number[]; aNear: number[]; aFar: number[] }>({ of: null, lv: [], aNear: [], aFar: [] });
+  useFrame(({ camera }, rawDt) => {
     if (!lod) return;
+    const dt = Math.min(rawDt, 0.1);
     const pad = cell * 0.71;
-    if (level.current.of !== chunks) level.current = { of: chunks, lv: [] };
-    const lv = level.current.lv;
+    const st = state.current;
+    if (st.of !== chunks) Object.assign(st, { of: chunks, lv: [], aNear: [], aFar: [] });
     const margin = (t: number) => Math.max(4, t * 0.06);
+    const step = dt / FADE_SECONDS;
     for (let i = 0; i < chunks.length; i++) {
       const d = camera.position.distanceTo(chunks[i].c) - pad;
       const want = d >= hide ? 2 : d < near ? 0 : 1;
-      const cur = lv[i];
+      const cur = st.lv[i];
       let next = want;
       if (cur !== undefined && want !== cur) {
-        // Only move once the distance is clear of the boundary between the two levels.
         // 0↔1 switch at `near`; anything involving hidden (2) switches at `hide`
         const edge = Math.min(want, cur) === 0 && Math.max(want, cur) === 1 ? near : hide;
         if (Math.abs(d - edge) < margin(edge)) next = cur;
       }
-      if (next === cur) continue;
-      lv[i] = next;
-      const nm = nearMeshes.current[i];
-      const fm = farMeshes.current[i];
-      if (nm) nm.visible = next === 0;
-      if (fm) fm.visible = next === 1;
+      const first = cur === undefined;
+      st.lv[i] = next;
+      // Fade targets; the first time a chunk is seen it snaps (no fade from nothing on load).
+      const tn = next === 0 ? 1 : 0;
+      const tf = next === 1 ? 1 : 0;
+      const an = first ? tn : moveTo(st.aNear[i] ?? tn, tn, step);
+      const af = first ? tf : moveTo(st.aFar[i] ?? tf, tf, step);
+      st.aNear[i] = an;
+      st.aFar[i] = af;
+      applyFade(nearMeshes.current[i], an, false);
+      applyFade(farMeshes.current[i], af, true);
     }
   });
   return (
@@ -369,4 +443,43 @@ export function TrailMarkers() {
       <Chunked items={stones} geometry={kitGeometry(RECIPE, 'talus', 0, true)} hide={140} material={MATS.solid} place={placerFor('rock')} receive />
     </group>
   );
+}
+
+/**
+ * Shader warm-up (v0.9): compile every material the scenery can use — including the fade
+ * variants — while the expedition starts, so nothing stalls a frame the
+ * first time it comes into view (that showed up as a lag as the climber set off).
+ */
+export function ShaderWarmup() {
+  const { gl, scene, camera } = useThree();
+  const phase = useGame((s) => s.phase);
+  const done = useRef(false);
+  useEffect(() => {
+    if (phase !== 'playing' || done.current) return;
+    done.current = true;
+    const hidden: THREE.Object3D[] = [];
+    scene.traverse((o) => {
+      if (!o.visible) {
+        hidden.push(o);
+        o.visible = true;
+      }
+    });
+    // stand-ins for the dither variants (only used while a chunk fades)
+    const extra = new THREE.Group();
+    const tiny = new THREE.BoxGeometry(0.01, 0.01, 0.01);
+    for (const base of [MATS.solid, MATS.plant])
+      for (const m of ditherMaterials(base)) {
+        const mesh = new THREE.InstancedMesh(tiny, m, 1);
+        mesh.setColorAt(0, new THREE.Color(1, 1, 1));
+        mesh.position.copy(camera.position).add(new THREE.Vector3(0, -1000, 0));
+        extra.add(mesh);
+      }
+    scene.add(extra);
+    // compile only (no render): drawing the whole map once would itself stall a slow device
+    gl.compile(scene, camera);
+    scene.remove(extra);
+    tiny.dispose();
+    for (const o of hidden) o.visible = false;
+  }, [phase, gl, scene, camera]);
+  return null;
 }

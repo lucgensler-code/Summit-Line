@@ -84,7 +84,7 @@ export const ITEMS = {
   mountainHemlockSnowy: { kind: 'tree', settings: snowy(mountainHemlock), variants: 3, near: 55, hide: Infinity },
   subalpineFirSnowy: { kind: 'tree', settings: snowy(subalpineFir), variants: 2, near: 55, hide: Infinity },
   whitebarkPine: { kind: 'tree', settings: whitebarkPine, variants: 2, near: 55, hide: Infinity },
-  snag: { kind: 'tree', settings: snag, variants: 2, near: 140, hide: 600 },
+  snag: { kind: 'tree', settings: snag, variants: 2, near: 140, hide: Infinity }, // v0.9: never hidden (pale trunks popped in at 600 m)
 
   // rocks ---------------------------------------------------------------------------------------
   forestBoulder: { kind: 'rock', settings: rock({ detail: 1, colors: FOREST_STONE, moss: 0.85, lichen: 0.3 }), variants: 2, near: 120, hide: 700, collide: 0.8 },
@@ -92,9 +92,9 @@ export const ITEMS = {
   basaltBoulder: { kind: 'rock', settings: rock({ detail: 1, colors: BASALT, shape: [1.05, 1.15, 1], cuts: 9, angularity: 0.75, cracks: 0.5, lichen: 0.2 }), variants: 2, near: 130, hide: 900, collide: 0.8 },
   cinderRock: { kind: 'rock', settings: rock({ detail: 1, colors: CINDER, shape: [1, 1.2, 0.95], lumpiness: 0.28, cuts: 5, angularity: 0.5, lichen: 0.05 }), variants: 2, near: 80, hide: 260 },
   talus: { kind: 'rock', settings: rock({ detail: 1, colors: BASALT, cuts: 8, angularity: 0.75, shape: [1.1, 1.1, 1], lichen: 0.12 }), variants: 2, near: 70, hide: 220 },
-  snowRock: { kind: 'rock', settings: rock({ detail: 1, colors: BASALT, shape: [1.1, 0.95, 1], lumpiness: 0.22, cuts: 6, angularity: 0.55, snow: 0.5, lichen: 0 }), variants: 2, near: 130, hide: 900, collide: 0.8 },
+  snowRock: { kind: 'rock', settings: rock({ detail: 1, colors: BASALT, shape: [1.15, 0.85, 1], lumpiness: 0.28, cuts: 5, angularity: 0.45, snow: 0.32, lichen: 0.05 }), variants: 2, near: 130, hide: 900, collide: 0.8 },
   outcrop: { kind: 'rock', settings: rock({ detail: 2, colors: BASALT, shape: [1.7, 1.15, 1.05], cuts: 9, angularity: 0.75, ledges: 0.7, cracks: 0.7, lichen: 0.12 }), variants: 2, near: 160, hide: Infinity, collide: 0.7 },
-  outcropSnowy: { kind: 'rock', settings: rock({ detail: 2, colors: BASALT, shape: [1.7, 1.15, 1.05], cuts: 9, angularity: 0.75, ledges: 0.7, cracks: 0.6, snow: 0.75 }), variants: 2, near: 160, hide: Infinity, collide: 0.7 },
+  outcropSnowy: { kind: 'rock', settings: rock({ detail: 2, colors: BASALT, shape: [1.7, 1.15, 1.05], lumpiness: 0.24, cuts: 8, angularity: 0.65, ledges: 0.4, cracks: 0.6, snow: 0.45 }), variants: 2, near: 160, hide: Infinity, collide: 0.7 },
 
   // ground cover --------------------------------------------------------------------------------
   grass: { kind: 'grass', settings: { blades: 10, height: 0.85, spread: 0.6, width: 0.065, base: '#6f7a40', tip: '#c9c47e', dry: 0.3 }, variants: 2, hide: 36 },

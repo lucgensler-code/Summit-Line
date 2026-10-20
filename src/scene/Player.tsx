@@ -418,13 +418,15 @@ export function CameraRig() {
       const c = summitCinematic();
       const zoom = clamp(d / CAM_DEFAULT, 0.4, 3);
       const a = cam.yaw + c.orbit;
-      const r = lerp(7, 58, c.reveal) * zoom;
-      const h = (lerp(2.2, 22, c.reveal) + Math.sin(cam.pitch) * 18) * zoom;
+      // v0.9: near eye level — just above the climber's head — pulling back only a little, so
+      // the shot frames the climber, the cairn and the horizon instead of looking down.
+      const r = lerp(5.5, 16, c.reveal) * zoom;
+      const h = lerp(1.9, 2.6, c.reveal) + clamp(Math.sin(cam.pitch) * 3, -0.8, 1.5);
       tmpPos.set(p.x + Math.sin(a) * r, p.y + h, p.z + Math.cos(a) * r);
       const ground = heightAt(tmpPos.x, tmpPos.z) + 2;
       if (tmpPos.y < ground) tmpPos.y = ground;
       camera.position.lerp(tmpPos, 1 - Math.exp(-dt * 2.5));
-      tmpTarget.set(p.x, p.y + lerp(1.4, 0.5, c.reveal), p.z);
+      tmpTarget.set(p.x, p.y + lerp(1.4, 1.6, c.reveal), p.z);
       look.current.lerp(tmpTarget, 1 - Math.exp(-dt * 3));
       camera.lookAt(look.current);
       return;

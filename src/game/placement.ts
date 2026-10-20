@@ -214,6 +214,8 @@ export function placeScenery(W: World, recipe: Recipe, T: Tools) {
         const { gx, gz } = T.gradientAt(x, z);
         const sl = Math.hypot(gx, gz);
         if (f < O.from || sl < O.minSlope || T.trailQuery(x, z, O.trailClear) || nearGem(x, z, 8) || Math.hypot(x, z) < 30) continue;
+        // (v0.9: none on the summit dome itself — they read as white boxes beside the cairn)
+        if (Math.hypot(x - W.summit.x, z - W.summit.z) < 50) continue;
         n++;
         const s = size(O.size);
         const cx = -gz / sl;
@@ -225,7 +227,7 @@ export function placeScenery(W: World, recipe: Recipe, T: Tools) {
       }
     }
     // (v0.8: never inside the crater, and clear of the summit cairn)
-    scatterBand(R.summitRocks, (x, z, f) => f > R.summitRocks.from && Math.hypot(x, z) > RIM_R + 6 && Math.hypot(x - W.summit.x, z - W.summit.z) > 8, 0.3);
+    scatterBand(R.summitRocks, (x, z, f) => f > R.summitRocks.from && Math.hypot(x, z) > RIM_R + 6 && Math.hypot(x - W.summit.x, z - W.summit.z) > 25, 0.3);
   }
 
   // ------------------------------------------------------------------------------ ground cover
