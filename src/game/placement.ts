@@ -42,6 +42,18 @@ export function placeScenery(W: World, recipe: Recipe, T: Tools) {
     return !hit || hit.dist > d;
   };
   const nearLake = (x: number, z: number, pad: number) => Math.hypot(x - LAKE.x, z - LAKE.z) < LAKE.r + pad;
+  // v0.9: a clear sightline from the tarn junction to the water, so the side trail and the lake
+  // are visible from the main trail.
+  const spur0 = W.lines[1]?.pts[0];
+  const inTarnView = (x: number, z: number, pad: number) => {
+    if (!spur0) return false;
+    const ax = spur0.x;
+    const az = spur0.z;
+    const bx = LAKE.x - ax;
+    const bz = LAKE.z - az;
+    const t = Math.max(0, Math.min(1, ((x - ax) * bx + (z - az) * bz) / (bx * bx + bz * bz)));
+    return Math.hypot(x - (ax + bx * t), z - (az + bz * t)) < pad + t * 6;
+  };
   const nearTrailhead = (x: number, z: number, d = 26) => Math.hypot(x - th.x, z - th.z) < d;
   const nearGem = (x: number, z: number, d: number) => W.gems.some((g) => Math.hypot(g.x - x, g.z - z) < d);
   const inMap = (r: number, rand: () => number) => {
@@ -78,7 +90,7 @@ export function placeScenery(W: World, recipe: Recipe, T: Tools) {
       const dEdge = trailFieldDistance(x, z) - R;
       if (dEdge > -25) p = Math.min(1, p * (1 + 0.9 * smoothstep(-25, 15, dEdge)));
       if (rand() > p) continue;
-      if (slopeAt(x, z) > S.maxSlope || nearLake(x, z, 4) || nearTrailhead(x, z) || nearGem(x, z, 3)) continue;
+      if (slopeAt(x, z) > S.maxSlope || nearLake(x, z, 4) || nearTrailhead(x, z) || nearGem(x, z, 3) || inTarnView(x, z, 9)) continue;
       let r = rand() * total;
       let k = 0;
       while (k < weights.length - 1 && r > weights[k]) r -= weights[k++];
@@ -294,6 +306,8 @@ export function placeScenery(W: World, recipe: Recipe, T: Tools) {
           if (!best || sl < best.sl) best = { x, z, sl };
         }
       if (!best || best.sl > C.maxSlope || nearGem(best.x, best.z, 3)) continue;
+      // keep the tarn junction (and its signpost) clear
+      if (spur0 && Math.hypot(best.x - spur0.x, best.z - spur0.z) < 22) continue;
       // Rest on the lowest point under its footprint so no side floats.
       let y = Infinity;
       for (const [ox, oz] of [[0.6, 0], [-0.6, 0], [0, 0.6], [0, -0.6], [0, 0]]) y = Math.min(y, T.heightAt(best.x + ox, best.z + oz));
@@ -305,7 +319,7 @@ export function placeScenery(W: World, recipe: Recipe, T: Tools) {
     // v0.8: two cairns mark the tarn spur so it reads as a trail from the junction.
     const spur = W.lines[1];
     if (spur)
-      for (const [f, side] of [[0.3, 1], [0.68, -1]] as const) {
+      for (const [f, side] of [[0.55, 1], [0.86, -1]] as const) {
         const i = Math.min(spur.pts.length - 2, Math.floor(f * (spur.pts.length - 1)));
         const a = spur.pts[i];
         const b = spur.pts[i + 1];
@@ -326,4 +340,5 @@ export function placeScenery(W: World, recipe: Recipe, T: Tools) {
   const SMALL = new Set(['talus', 'cinderRock', 'forestBoulder', 'meadowBoulder']);
   W.cover = W.cover.filter((c) => trailFieldDistance(c.x, c.z) < R + 25);
   W.rocks = W.rocks.filter((r) => !SMALL.has(r.item ?? '') || trailFieldDistance(r.x, r.z) < R + 50);
+  W.rocks = W.rocks.filter((r) => !inTarnView(r.x, r.z, 6));
 }

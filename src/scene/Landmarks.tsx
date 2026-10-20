@@ -9,8 +9,27 @@ import { mulberry32 } from '../game/noise';
 import { runtime } from '../game/store';
 
 function SignPost({ lm }: { lm: Landmark }) {
+  const k = lm.size ?? 1;
   return (
-    <group position={[lm.x, lm.y, lm.z]} rotation={[0, lm.rot + Math.PI / 2, 0]}>
+    <group position={[lm.x, lm.y, lm.z]}>
+      {lm.arrow !== undefined && (
+        // arrow board pointing down the side trail (v0.9)
+        <group rotation={[0, lm.arrow - Math.PI / 2, 0]} scale={k}>
+          <mesh position={[0.55, 1.78, 0]} castShadow>
+            <boxGeometry args={[1.0, 0.3, 0.08]} />
+            <meshStandardMaterial color="#9a7046" />
+          </mesh>
+          <mesh position={[1.12, 1.78, 0]} rotation={[0, 0, -Math.PI / 2]} castShadow>
+            <coneGeometry args={[0.22, 0.24, 3]} />
+            <meshStandardMaterial color="#9a7046" />
+          </mesh>
+          <mesh position={[0.5, 1.78, 0.045]}>
+            <planeGeometry args={[0.75, 0.06]} />
+            <meshBasicMaterial color="#cfe6f2" />
+          </mesh>
+        </group>
+      )}
+    <group rotation={[0, lm.rot + Math.PI / 2, 0]} scale={k}>
       <mesh position={[0, 0.9, 0]} castShadow>
         <boxGeometry args={[0.16, 1.8, 0.16]} />
         <meshStandardMaterial color="#5b3f2a" />
@@ -31,6 +50,7 @@ function SignPost({ lm }: { lm: Landmark }) {
         <planeGeometry args={[0.7, 0.06]} />
         <meshBasicMaterial color="#f0e2c4" />
       </mesh>
+    </group>
     </group>
   );
 }

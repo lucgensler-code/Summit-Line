@@ -443,7 +443,7 @@ function ribbonGeometry(line: TrailLine, halfW: number) {
 }
 
 export function Trail() {
-  const geos = useMemo(() => getWorld().lines.map((l) => ribbonGeometry(l, l.main ? TRAIL_HALF_WIDTH : TRAIL_HALF_WIDTH * 0.7)), []);
+  const geos = useMemo(() => getWorld().lines.map((l) => ribbonGeometry(l, TRAIL_HALF_WIDTH) /* v0.9: side trails are full width too */), []);
   return (
     <group>
       {geos.map((g, i) => (

@@ -9,6 +9,10 @@ export interface Landmark {
   z: number;
   y: number;
   rot: number;
+  /** display scale (junction signposts are larger) */
+  size?: number;
+  /** extra arrow board pointing this way (radians, world yaw) */
+  arrow?: number;
   title: string;
   text: string;
 }
@@ -61,6 +65,8 @@ export function getLandmarks(): Landmark[] {
   const c1 = offsetFromTrail(Math.max(iCamp - 3, 0), lakeSide, 3.4);
   const c2 = offsetFromTrail(iCamp + 4, -lakeSide, 3.6);
   const spurMi = Math.max(0.1, unitsToMiles(W.lines[1]?.length ?? 40)).toFixed(1);
+  // the junction sign's arrow board points along the side trail toward the water
+  const tarnArrow = Math.atan2(LAKE.x - c1.x, LAKE.z - c1.z);
   // Viewpoint sign beside the end of the spur, turned to face someone arriving at the shore.
   const spur = W.lines[1];
   const tarnView = (() => {
@@ -95,7 +101,9 @@ export function getLandmarks(): Landmark[] {
       id: 'camp-sign',
       kind: 'sign',
       ...c1,
-      title: 'Obsidian Tarn ↗ — alpine checkpoint',
+      size: 1.45,
+      arrow: tarnArrow,
+      title: 'Obsidian Tarn ↗ 0.1 mi · water',
       text: `↗ Obsidian Tarn ${spurMi} mi: last reliable water. Filter here.\n↑ Summit ${mi(camp.s)} mi via the cinder switchbacks.`,
     },
     {
