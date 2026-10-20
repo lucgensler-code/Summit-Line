@@ -150,11 +150,12 @@ function pine(s: TreeSettings, seed: number, far: boolean) {
     const top = new THREE.Vector3(Math.sin(a) * H * lean, H * (0.7 + rand() * 0.3), Math.cos(a) * H * lean);
     parts.push(paintFaces(limb(base, top, H * 0.05, H * 0.022, far ? 4 : 5), rand, (c, _n, out) => out.copy(bark).multiplyScalar(groundAO(c.y, 0, 1, 0.6)), 0.08));
     // Foliage clumps along the upper stem, flattened by wind.
-    const clumps = far ? 2 : 3 + Math.floor(rand() * 2);
+    const clumps = far ? 1 : 3 + Math.floor(rand() * 2);
     for (let k = 0; k < clumps; k++) {
-      const f = 0.45 + (k / clumps) * 0.55;
+      const f = far ? 0.72 : 0.45 + (k / clumps) * 0.55;
       const p = base.clone().lerp(top, f);
-      const r = H * (0.2 + rand() * 0.12) * (1.1 - f * 0.4);
+      // the single distance clump is larger, standing in for the whole crown
+      const r = H * (0.2 + rand() * 0.12) * (1.1 - f * 0.4) * (far ? 1.45 : 1);
       const g = new THREE.IcosahedronGeometry(r, 0);
       g.scale(1.25 + rand() * 0.4, 0.55 + rand() * 0.2, 1.1 + rand() * 0.3).rotateY(rand() * 3).translate(p.x + (rand() - 0.5) * r, p.y, p.z + (rand() - 0.5) * r);
       parts.push(

@@ -81,10 +81,10 @@ export const ITEMS = {
   westernHemlock: { kind: 'tree', settings: westernHemlock, variants: 3, near: 55, hide: Infinity },
   mountainHemlock: { kind: 'tree', settings: mountainHemlock, variants: 3, near: 55, hide: Infinity },
   subalpineFir: { kind: 'tree', settings: subalpineFir, variants: 2, near: 55, hide: Infinity },
-  mountainHemlockSnowy: { kind: 'tree', settings: snowy(mountainHemlock), variants: 3, near: 55, hide: Infinity },
-  subalpineFirSnowy: { kind: 'tree', settings: snowy(subalpineFir), variants: 2, near: 55, hide: Infinity },
+  mountainHemlockSnowy: { kind: 'tree', settings: snowy(mountainHemlock), variants: 1, near: 55, hide: Infinity },
+  subalpineFirSnowy: { kind: 'tree', settings: snowy(subalpineFir), variants: 1, near: 55, hide: Infinity },
   whitebarkPine: { kind: 'tree', settings: whitebarkPine, variants: 2, near: 55, hide: Infinity },
-  snag: { kind: 'tree', settings: snag, variants: 2, near: 140, hide: Infinity }, // v0.9: never hidden (pale trunks popped in at 600 m)
+  snag: { kind: 'tree', settings: snag, variants: 1, near: 140, hide: Infinity }, // v0.9: never hidden (pale trunks popped in at 600 m)
 
   // rocks ---------------------------------------------------------------------------------------
   forestBoulder: { kind: 'rock', settings: rock({ detail: 1, colors: FOREST_STONE, moss: 0.85, lichen: 0.3 }), variants: 2, near: 120, hide: 700, collide: 0.8 },
@@ -98,15 +98,15 @@ export const ITEMS = {
 
   // ground cover --------------------------------------------------------------------------------
   grass: { kind: 'grass', settings: { blades: 10, height: 0.85, spread: 0.6, width: 0.065, base: '#6f7a40', tip: '#c9c47e', dry: 0.3 }, variants: 2, hide: 36 },
-  forestGrass: { kind: 'grass', settings: { blades: 8, height: 0.7, spread: 0.55, width: 0.06, base: '#4a6534', tip: '#9cb062', dry: 0.1 }, variants: 2, hide: 55 },
-  alpineGrass: { kind: 'grass', settings: { blades: 9, height: 0.55, spread: 0.65, width: 0.055, base: '#5e6a3c', tip: '#c2b47a', dry: 0.5 }, variants: 2, hide: 55 },
+  forestGrass: { kind: 'grass', settings: { blades: 8, height: 0.7, spread: 0.55, width: 0.06, base: '#4a6534', tip: '#9cb062', dry: 0.1 }, variants: 2, hide: 46 },
+  alpineGrass: { kind: 'grass', settings: { blades: 9, height: 0.55, spread: 0.65, width: 0.055, base: '#5e6a3c', tip: '#c2b47a', dry: 0.5 }, variants: 2, hide: 46 },
   lupine: { kind: 'flower', settings: { grass: { blades: 4, height: 0.35, spread: 0.6, width: 0.04, base: '#47613a', tip: '#7d9655', dry: 0 }, stalks: 3, head: 'spike', colors: ['#6f68c8', '#8a72d0', '#5b5bb8'], stalkHeight: 0.55 }, variants: 2, hide: 32 },
   paintbrush: { kind: 'flower', settings: { grass: { blades: 4, height: 0.3, spread: 0.5, width: 0.035, base: '#4c6438', tip: '#88a058', dry: 0.1 }, stalks: 3, head: 'brush', colors: ['#e0503a', '#ef6a3c', '#d83f4a'], stalkHeight: 0.42 }, variants: 2, hide: 32 },
   aster: { kind: 'flower', settings: { grass: { blades: 4, height: 0.28, spread: 0.5, width: 0.03, base: '#4c6438', tip: '#8aa05a', dry: 0.2 }, stalks: 4, head: 'daisy', colors: ['#c9b8e8', '#f2f0e6', '#e9d36a'], stalkHeight: 0.32 }, variants: 2, hide: 32 },
-  beargrass: { kind: 'flower', settings: { grass: { blades: 16, height: 0.7, spread: 0.9, width: 0.025, base: '#3f5a33', tip: '#93a35e', dry: 0.15 }, stalks: 1, head: 'club', colors: ['#f3ecd2'], stalkHeight: 1.2 }, variants: 2, hide: 80 },
-  heather: { kind: 'shrub', settings: { form: 'heather', size: 1.0, leaf: ['#2f4a2c', '#5c7a42'], accent: '#d76a9c', accentAmount: 0.35 }, variants: 3, hide: 38 },
-  huckleberry: { kind: 'shrub', settings: { form: 'huckleberry', size: 1.1, leaf: ['#3e5e2e', '#6f8c3e'], accent: '#a8452e', accentAmount: 0.25 }, variants: 3, hide: 65 },
-  cushion: { kind: 'shrub', settings: { form: 'cushion', size: 0.75, leaf: ['#5b6a44', '#8e9a68'], accent: '#e6a7c5', accentAmount: 0.4 }, variants: 2, hide: 60 },
+  beargrass: { kind: 'flower', settings: { grass: { blades: 16, height: 0.7, spread: 0.9, width: 0.025, base: '#3f5a33', tip: '#93a35e', dry: 0.15 }, stalks: 1, head: 'club', colors: ['#f3ecd2'], stalkHeight: 1.2 }, variants: 2, hide: 64 },
+  heather: { kind: 'shrub', settings: { form: 'heather', size: 1.0, leaf: ['#2f4a2c', '#5c7a42'], accent: '#d76a9c', accentAmount: 0.35 }, variants: 2, hide: 38 },
+  huckleberry: { kind: 'shrub', settings: { form: 'huckleberry', size: 1.1, leaf: ['#3e5e2e', '#6f8c3e'], accent: '#a8452e', accentAmount: 0.25 }, variants: 2, hide: 52 },
+  cushion: { kind: 'shrub', settings: { form: 'cushion', size: 0.75, leaf: ['#5b6a44', '#8e9a68'], accent: '#e6a7c5', accentAmount: 0.4 }, variants: 2, hide: 48 },
   fern: { kind: 'fern', settings: { fronds: 10, length: 1.35, arch: 0.6, color: ['#4f7f36', '#93bd5a'] }, variants: 2, hide: 48 },
 } satisfies Record<string, KitItem>;
 
@@ -170,11 +170,11 @@ export const PLACEMENT = {
     { item: 'huckleberry', count: 2600, clump: 2, from: 5400, to: 7000, patch: 30, cover: 0.35 },
     { item: 'forestGrass', count: 10000, clump: 5, from: 5300, to: 6800, patch: 22, cover: 0.4 },
     { item: 'beargrass', count: 900, clump: 2, from: 6000, to: 7100, patch: 40, cover: 0.25 },
-    { item: 'grass', count: 36000, clump: 7, from: 6500, to: 7800, patch: 20, cover: 0.55 },
+    { item: 'grass', count: 30000, clump: 7, from: 6500, to: 7800, patch: 20, cover: 0.55 },
     { item: 'lupine', count: 4500, clump: 4, from: 6600, to: 7600, patch: 18, cover: 0.22 },
     { item: 'paintbrush', count: 3000, clump: 3, from: 6600, to: 7500, patch: 16, cover: 0.18 },
     { item: 'aster', count: 2500, clump: 4, from: 6500, to: 7300, patch: 16, cover: 0.18 },
-    { item: 'heather', count: 6000, clump: 3, from: 6900, to: 7900, patch: 24, cover: 0.35 },
+    { item: 'heather', count: 4500, clump: 3, from: 6900, to: 7900, patch: 24, cover: 0.35 },
     { item: 'alpineGrass', count: 3500, clump: 4, from: 7600, to: 8700, patch: 26, cover: 0.25 },
     { item: 'cushion', count: 1200, clump: 2, from: 7500, to: 8700, patch: 30, cover: 0.22 },
   ] as { item: ItemId; count: number; clump: number; from: number; to: number; patch: number; cover: number; underTrees?: boolean }[],

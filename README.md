@@ -312,6 +312,36 @@ Bug fixes, budget and visual quality. Gem positions and the main route are uncha
   viewpoint at the shore.
 - **Small touches.** The start camera is near eye level, and ground cover sways in the wind.
 
+## v0.9 bug fixes and refinement
+
+- **Shadows hold still.** The shadow map's light direction steps (about every 0.6° of sun
+  movement) instead of following the moving sun every frame, which made shadow edges crawl.
+  Frame-to-frame changes while standing still dropped about 3×.
+- **`?strobetest`.** Switches one layer off at a time every 6 s, with a large label, to pin
+  down a GPU glitch on the device. `?debug` shows the GPU name and has FXAA and tree-swap
+  toggles.
+- **No pop-in.**
+  - Near/far level changes cross-fade with a dither pattern; the dither material is only used
+    while fading.
+  - Snags (dead trees) are never hidden.
+  - Ground cover uses smaller chunks, so it fades out near its real distance.
+- **Shader warm-up.** All scenery materials are compiled as the climb starts, so nothing
+  stalls the first time it appears.
+- **Summit.**
+  - A broad cairn of mixed stones about 1.4 m tall, with a weathered pole wedged into its real
+    top and a small flag.
+  - No rocks or outcrops on the summit dome.
+  - The celebration camera stays near eye level.
+- **Tarn side trail.**
+  - The spur is drawn full width, with a large junction signpost and an arrow board.
+  - A clear sightline runs from the junction to the water, and trail cairns are kept clear of
+    the sign.
+- **Budget.**
+  - Triangles are at or under v0.6.1 in every captured view except sunrise (+5%).
+  - Draw calls are within +12%.
+- **Roadmap notes.** `docs/roadmap-notes.md` lists what to move into data before more
+  mountains and ranges.
+
 ## Project layout
 
 ```
