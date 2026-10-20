@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { isMuted, setMuted } from '../game/audio';
 import { keysSwapped, setKeysSwapped } from '../game/input';
 import { useGame } from '../game/store';
+import { usePrefs } from '../game/prefs';
 import { getUnits, setUnits } from '../game/units';
 import { useUnits } from './useUnits';
 
@@ -62,6 +63,8 @@ export function PauseMenu() {
   const [swap, setSwap] = useState(keysSwapped());
   const units = useUnits();
   const setLbOpen = useGame((s) => s.setLbOpen);
+  const hintsHidden = usePrefs((s) => s.hintsHidden);
+  const setHintsHidden = usePrefs((s) => s.setHintsHidden);
   return (
     <div className="modal-backdrop">
       <div className="modal pause" role="dialog" aria-label="Paused">
@@ -109,6 +112,9 @@ export function PauseMenu() {
               }}
             >
               Keys: {swap ? 'Arrows move · WASD camera' : 'WASD move · Arrows camera'}
+            </button>
+            <button type="button" className="btn subtle desktop-only" onClick={() => setHintsHidden(!hintsHidden)}>
+              Key hints: {hintsHidden ? 'Hidden (H to show)' : 'Shown'}
             </button>
             <button type="button" className="btn subtle" onClick={() => setLbOpen(true)}>
               High scores

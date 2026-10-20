@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { input, keysSwapped, queueAction } from '../game/input';
 import { useGame } from '../game/store';
+import { usePrefs } from '../game/prefs';
 import { elevUnit, elevValue, fmtDistance, fmtShortDistance, fmtTemp, fmtWaterShort, fmtWeight, fmtWind } from '../game/units';
 import { fmtReal } from './ExpeditionLog';
 import { IconArrow, IconBar, IconBolt, IconBottle, IconClock, IconDrop, IconRecenter, IconRest, IconTimer } from './icons';
@@ -44,6 +45,20 @@ export function HUD() {
   const showHint = useGame((s) => s.showHint);
   const setMapOpen = useGame((s) => s.setMapOpen);
   const pause = useGame((s) => s.pause);
+  const hintsHidden = usePrefs((s) => s.hintsHidden);
+  const setHintsHidden = usePrefs((s) => s.setHintsHidden);
+  const quickOpen = usePrefs((s) => s.quickOpen);
+  const setQuickOpen = usePrefs((s) => s.setQuickOpen);
+  // close the quick actions menu on a click anywhere else
+  useEffect(() => {
+    if (!quickOpen) return;
+    const onDown = (e: PointerEvent) => {
+      const t = e.target as Element | null;
+      if (!t?.closest('.corner-dock')) setQuickOpen(false);
+    };
+    window.addEventListener('pointerdown', onDown, true);
+    return () => window.removeEventListener('pointerdown', onDown, true);
+  }, [quickOpen, setQuickOpen]);
   const [details, setDetails] = useState(false);
   const greenFlash = useFlash(gemFlash?.kind === 'green' ? gemFlash.at : undefined);
   // Keep the last notification briefly after it ends so it can fade out instead of vanishing.
@@ -240,13 +255,49 @@ export function HUD() {
           )}
         </div>
 
-        <div className="keys-hint desktop-only">
-          <span>
-            <kbd>{keysSwapped() ? '↑←↓→' : 'WASD'}</kbd> move <kbd>Shift</kbd> dash <kbd>Space</kbd> act/rest/jump
-          </span>
-          <span>
-            <kbd>{keysSwapped() ? 'WASD' : '↑←↓→'}</kbd> camera <kbd>+ −</kbd> zoom <kbd>C</kbd> recenter <kbd>M</kbd> map
-          </span>
+        <div className="corner-dock desktop-only">
+          {quickOpen && (
+            <div className="quick-menu panel" role="menu" aria-label="Quick actions">
+              <button type="button" role="menuitem" onClick={() => { setHintsHidden(!hintsHidden); setQuickOpen(false); }}>
+                {hintsHidden ? 'Show key hints' : 'Hide key hints'} <kbd>H</kbd>
+              </button>
+              <button type="button" role="menuitem" onClick={() => { setQuickOpen(false); useGame.getState().setMapOpen(true); }}>
+                Map <kbd>M</kbd>
+              </button>
+              <button type="button" role="menuitem" onClick={() => { setQuickOpen(false); input.recenter = true; }}>
+                Recenter camera <kbd>C</kbd>
+              </button>
+              <button type="button" role="menuitem" onClick={() => { setQuickOpen(false); pause(); }}>
+                Pause <kbd>Esc</kbd>
+              </button>
+            </div>
+          )}
+          {!hintsHidden && (
+            <div className="keys-hint">
+              <span>
+                <kbd>{keysSwapped() ? '↑←↓→' : 'WASD'}</kbd> move <kbd>Shift</kbd> dash <kbd>Space</kbd> act/rest/jump
+              </span>
+              <span>
+                <kbd>{keysSwapped() ? 'WASD' : '↑←↓→'}</kbd> camera <kbd>+ −</kbd> zoom <kbd>C</kbd> recenter <kbd>M</kbd> map
+              </span>
+            </div>
+          )}
+          <div className="corner-btns">
+            <button type="button" className="hud-icon small" onClick={() => setHintsHidden(!hintsHidden)} aria-pressed={!hintsHidden} title={hintsHidden ? 'Show key hints (H)' : 'Hide key hints (H)'} aria-label={hintsHidden ? 'Show key hints' : 'Hide key hints'}>
+              <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
+                <rect x="2.5" y="6" width="19" height="12" rx="2" fill="none" stroke="currentColor" strokeWidth="1.6" />
+                <path d="M6 10h1.5M9.5 10H11M13 10h1.5M16.5 10H18M7.5 14h9" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+              </svg>
+              {hintsHidden && <span>Controls</span>}
+            </button>
+            <button type="button" className="hud-icon small" onClick={() => setQuickOpen(!quickOpen)} aria-expanded={quickOpen} title="Quick actions (?)" aria-label="Quick actions">
+              <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
+                <circle cx="6" cy="12" r="1.7" fill="currentColor" />
+                <circle cx="12" cy="12" r="1.7" fill="currentColor" />
+                <circle cx="18" cy="12" r="1.7" fill="currentColor" />
+              </svg>
+            </button>
+          </div>
         </div>
       </div>
       {reading && <SignModal />}

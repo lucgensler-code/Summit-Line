@@ -688,6 +688,7 @@ kbd {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
+  pointer-events: none;
   gap: 3px;
   font-size: 11px;
   color: #fff;
@@ -3046,4 +3047,73 @@ textarea {
   text-align: center;
   pointer-events: none;
   max-width: calc(100vw - 32px);
+}
+
+/* v0.10: desktop corner dock — key hints (hideable), Controls + quick actions buttons */
+.corner-dock {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 5px;
+  position: relative;
+}
+.corner-btns {
+  display: flex;
+  gap: 5px;
+  pointer-events: auto;
+}
+.hud-icon.small {
+  width: auto;
+  border-radius: 14px;
+  height: 28px;
+  min-width: 28px;
+  padding: 0 7px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11.5px;
+  font-weight: 600;
+}
+.quick-menu {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 6px);
+  display: flex;
+  flex-direction: column;
+  min-width: 200px;
+  padding: 5px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 10px;
+  pointer-events: auto;
+  z-index: 5;
+}
+.quick-menu button {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+.quick-menu button:hover,
+.quick-menu button:focus-visible {
+  background: rgba(255, 255, 255, 0.1);
+}
+/* bottom bar sits lower and more compact on desktop, opening up the view */
+.is-desktop .hud {
+  padding-bottom: calc(var(--safe-b) + 5px);
+}
+.is-desktop .vitals {
+  padding: 5px 9px 6px;
+  gap: 3px;
+}
+.is-desktop .supply-btn {
+  min-height: 30px;
 }

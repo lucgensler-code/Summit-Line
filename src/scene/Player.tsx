@@ -7,7 +7,7 @@ import { clamp, lerp, smoothstep } from '../game/noise';
 import { clockHour, daylight } from '../game/sim';
 import { summitCinematic } from '../game/cinematic';
 import { CAM_DEFAULT, CAM_MIN, runtime, useGame } from '../game/store';
-import { heightAt } from '../game/world';
+import { HALF, farHeight, getWorld, heightAt } from '../game/world';
 import { perfStats } from './Performance';
 
 const COLORS = {
@@ -351,6 +351,25 @@ export function Player() {
 // ---------------------------------------------------------------------------------------------
 
 const tmpTarget = new THREE.Vector3();
+const GAME_FOV = 60;
+/** Reference zoom distance on the summit (cam.dist units): the reveal framing. */
+const SUMMIT_REF_DIST = 9;
+const REDUCED_MOTION = typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+const summitCam = { run: -1 };
+let backDir: { x: number; z: number } | null = null;
+/** Horizontal direction from the summit back down the final approach (unit vector). */
+function summitBackDir() {
+  if (backDir) return backDir;
+  const m = getWorld().main;
+  const n = m.pts.length;
+  let i = n - 1;
+  while (i > 0 && m.s[n - 1] - m.s[i] < 40) i--;
+  const dx = m.pts[i].x - m.pts[n - 1].x;
+  const dz = m.pts[i].z - m.pts[n - 1].z;
+  const l = Math.hypot(dx, dz) || 1;
+  return (backDir = { x: dx / l, z: dz / l });
+}
+const groundOrFar = (x: number, z: number) => (Math.max(Math.abs(x), Math.abs(z)) < HALF - 2 ? heightAt(x, z) : farHeight(x, z));
 const tmpPos = new THREE.Vector3();
 
 /** Third-person follow camera, prep-screen flyover and summit cinematic. */
@@ -376,6 +395,11 @@ export function CameraRig() {
     } else if (offset.current) {
       pc.clearViewOffset();
       offset.current = false;
+    }
+
+    if (!(g.phase === 'summit' && p?.summited) && pc.fov !== GAME_FOV) {
+      pc.fov = GAME_FOV;
+      pc.updateProjectionMatrix();
     }
 
     if (g.phase === 'prep' || !p) {
@@ -414,21 +438,57 @@ export function CameraRig() {
     const d = dist.current;
 
     if (g.phase === 'summit' && p.summited) {
-      // Celebration: pull back and orbit 360° while the day cycles. Drag / pinch still steer it.
+      // v0.10 summit reveal: a drone pull-back. Close behind the climber's shoulder looking out at
+      // the next range, then back and up along the approach side so the summit, snowfield and
+      // switchbacks fall away and the ranges spread out — the climber kept readable throughout —
+      // then a slow orbit the player can steer and zoom ("explore the view").
       const c = summitCinematic();
-      const zoom = clamp(d / CAM_DEFAULT, 0.4, 3);
-      const a = cam.yaw + c.orbit;
-      // v0.9: near eye level — just above the climber's head — pulling back only a little, so
-      // the shot frames the climber, the cairn and the horizon instead of looking down.
-      const r = lerp(5.5, 16, c.reveal) * zoom;
-      const h = lerp(1.9, 2.6, c.reveal) + clamp(Math.sin(cam.pitch) * 3, -0.8, 1.5);
-      tmpPos.set(p.x + Math.sin(a) * r, p.y + h, p.z + Math.cos(a) * r);
-      const ground = heightAt(tmpPos.x, tmpPos.z) + 2;
-      if (tmpPos.y < ground) tmpPos.y = ground;
-      camera.position.lerp(tmpPos, 1 - Math.exp(-dt * 2.5));
-      tmpTarget.set(p.x, p.y + lerp(1.4, 1.6, c.reveal), p.z);
-      look.current.lerp(tmpTarget, 1 - Math.exp(-dt * 3));
+      const back = summitBackDir();
+      if (summitCam.run !== runtime.runId) {
+        summitCam.run = runtime.runId;
+        cam.yaw = Math.atan2(back.x, back.z);
+        cam.pitch = 0.1;
+        cam.dist = SUMMIT_REF_DIST;
+        dist.current = cam.dist;
+      }
+      const portrait = size.height > size.width * 1.15;
+      const R_END = portrait ? 80 : 105; // as far as the climber stays readable
+      const H_END = R_END * (portrait ? 0.3 : 0.22);
+      const dur = REDUCED_MOTION ? 5 : 8;
+      // 0–2 s hold close; 2–10 s pull back (eased); afterwards hold and orbit
+      const k = smoothstep(0, 1, clamp((c.since - 2) / dur, 0, 1));
+      const kOut = 1 - Math.pow(1 - k, 2.2); // height leads…
+      const kIn = Math.pow(k, 1.35); // …distance follows
+      // After the reveal the player's zoom scales the distance: in to the cairn, out to the view.
+      const zoomK = k >= 1 ? Math.pow(clamp(d / SUMMIT_REF_DIST, 0.2, 1.25), 2.2) : 1;
+      const R = Math.max(4.5, lerp(4.2, R_END, kIn) * zoomK);
+      const H = lerp(1.9, H_END, kOut) * (k >= 1 ? Math.min(1, zoomK * 1.15) : 1) + clamp(Math.sin(cam.pitch - 0.1) * R * 0.35, -R * 0.08, R * 0.4);
+      // slow drift once the reveal is done; drag/arrow keys steer via cam.yaw
+      const drift = Math.max(0, c.since - 2 - dur) * (REDUCED_MOTION ? 0.01 : 0.03);
+      const a = cam.yaw + drift;
+      tmpPos.set(p.x + Math.sin(a) * R, p.y + Math.max(1.9, H), p.z + Math.cos(a) * R);
+      // stay above the ground along the way (the cone falls away, but nearby ridges don't)
+      for (let i = 1; i <= 4; i++) {
+        const f = i / 4;
+        const gx = lerp(p.x, tmpPos.x, f);
+        const gz = lerp(p.z, tmpPos.z, f);
+        const minY = groundOrFar(gx, gz) + 2.5 * f + 0.6;
+        const y = lerp(p.y + 1.6, tmpPos.y, f);
+        if (y < minY) tmpPos.y += (minY - y) / f;
+      }
+      camera.position.lerp(tmpPos, 1 - Math.exp(-dt * 3));
+      // Aim: from the horizon over the climber's shoulder to a point just below the summit, so
+      // the summit sits about a third of the way down the frame with the ranges above it.
+      const ahead = lerp(60, 0, kOut);
+      tmpTarget.set(p.x - back.x * ahead, p.y + lerp(1.6, -R * 0.17, kIn), p.z - back.z * ahead);
+      look.current.lerp(tmpTarget, 1 - Math.exp(-dt * 3.5));
       camera.lookAt(look.current);
+      // the lens widens a little during the pull-back: the climber shrinks faster than the mountain
+      const fov = lerp(55, 68, kIn);
+      if (Math.abs(pc.fov - fov) > 0.05) {
+        pc.fov = fov;
+        pc.updateProjectionMatrix();
+      }
       return;
     }
 
@@ -463,4 +523,31 @@ export function CameraRig() {
     camera.lookAt(look.current);
   });
   return null;
+}
+
+/**
+ * Summit beacon (v0.10): a soft warm ring on the snow around the climber during the summit
+ * reveal, sized to stay a few pixels wide on screen, so the climber can still be found when the
+ * camera has pulled far back. Invisible up close.
+ */
+export function ClimberBeacon() {
+  const ref = useRef<THREE.Mesh>(null);
+  const mat = useMemo(() => new THREE.MeshBasicMaterial({ color: '#ff6a1f', transparent: true, opacity: 0, depthWrite: false, depthTest: false, fog: false }), []);
+  const geo = useMemo(() => new THREE.RingGeometry(0.62, 1, 48).rotateX(-Math.PI / 2), []);
+  useFrame(({ camera }) => {
+    const m = ref.current;
+    const p = runtime.player;
+    const on = useGame.getState().phase === 'summit' && !!p?.summited;
+    if (!m || !p || !on) {
+      if (m) m.visible = false;
+      return;
+    }
+    const d = camera.position.distanceTo(m.position);
+    const fade = smoothstep(18, 45, d);
+    m.visible = fade > 0.01;
+    m.position.set(p.x, p.y + 0.08, p.z);
+    m.scale.setScalar(Math.max(1.2, d * 0.03));
+    mat.opacity = fade * 0.9;
+  });
+  return <mesh ref={ref} geometry={geo} material={mat} renderOrder={2} visible={false} />;
 }

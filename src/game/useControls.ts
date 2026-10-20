@@ -1,4 +1,5 @@
 import { prepDrag } from './prepOrbit';
+import { usePrefs } from './prefs';
 import { useEffect } from 'react';
 import { isMuted, setMuted } from './audio';
 import { input, queueAction } from './input';
@@ -50,6 +51,18 @@ export function useDesktopControls(canvasHost: React.RefObject<HTMLElement | nul
       }
       if (e.code === 'KeyM' && g.phase === 'playing' && !overlay) {
         g.setMapOpen(true);
+        return;
+      }
+      // v0.10: H shows/hides the key hints; / (the ? key) opens the quick actions menu
+      if (e.code === 'KeyH' && g.phase === 'playing' && !overlay && !e.repeat) {
+        const pr = usePrefs.getState();
+        pr.setHintsHidden(!pr.hintsHidden);
+        return;
+      }
+      if (e.code === 'Slash' && g.phase === 'playing' && !overlay && !e.repeat) {
+        const pr = usePrefs.getState();
+        pr.setQuickOpen(!pr.quickOpen);
+        e.preventDefault();
         return;
       }
       if (overlay || g.phase !== 'playing') return;
