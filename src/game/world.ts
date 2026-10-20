@@ -437,7 +437,8 @@ function buildWorld(): World {
   const dirx = (LAKE.x - j.x) / bestD;
   const dirz = (LAKE.z - j.z) / bestD;
   const shore = { x: LAKE.x - dirx * (LAKE.r + 4), z: LAKE.z - dirz * (LAKE.r + 4) };
-  const mid = { x: lerp(j.x, shore.x, 0.5) - dirz * 10, z: lerp(j.z, shore.z, 0.5) + dirx * 10 };
+  // v0.8: a straighter spur (gentle bend only) so the tarn is a short, obvious side trip.
+  const mid = { x: lerp(j.x, shore.x, 0.5) - dirz * 4, z: lerp(j.z, shore.z, 0.5) + dirx * 4 };
   const spur = makeLine([j, mid, shore], false, 4);
   const lines = [mainLine, spur];
   const hash = new SegmentHash();
@@ -659,6 +660,49 @@ export function collidersNear(x: number, z: number) {
     }
   return nearOut;
 }
+
+// ---- Play corridor (v0.8): how far from any trail the climber may roam.
+/** Corridor half-width in miles either side of the main trail and the tarn spur. */
+export const CORRIDOR_MI = 0.5;
+const CF_CELL = 8;
+const CF_N = Math.ceil(TERRAIN_SIZE / CF_CELL) + 1;
+let corridorField: Float32Array | null = null;
+
+/** Distance (units) to the nearest trail centreline, from a coarse precomputed field (bilinear). */
+export function trailFieldDistance(x: number, z: number) {
+  if (!corridorField) {
+    const W = getWorld();
+    const pts: Vec2[] = [];
+    for (const l of W.lines) for (let i = 0; i < l.pts.length; i += 2) pts.push(l.pts[i]);
+    corridorField = new Float32Array(CF_N * CF_N);
+    for (let iz = 0; iz < CF_N; iz++)
+      for (let ix = 0; ix < CF_N; ix++) {
+        const px = -HALF + ix * CF_CELL;
+        const pz = -HALF + iz * CF_CELL;
+        let b = Infinity;
+        for (let k = 0; k < pts.length; k++) {
+          const dx = pts[k].x - px;
+          const dz = pts[k].z - pz;
+          const d = dx * dx + dz * dz;
+          if (d < b) b = d;
+        }
+        corridorField[iz * CF_N + ix] = Math.sqrt(b);
+      }
+  }
+  const fx = clamp((x + HALF) / CF_CELL, 0, CF_N - 1.001);
+  const fz = clamp((z + HALF) / CF_CELL, 0, CF_N - 1.001);
+  const ix = Math.floor(fx);
+  const iz = Math.floor(fz);
+  const tx = fx - ix;
+  const tz = fz - iz;
+  const f = corridorField;
+  const a = f[iz * CF_N + ix] * (1 - tx) + f[iz * CF_N + ix + 1] * tx;
+  const b = f[(iz + 1) * CF_N + ix] * (1 - tx) + f[(iz + 1) * CF_N + ix + 1] * tx;
+  return a * (1 - tz) + b * tz;
+}
+
+/** Corridor half-width in world units. */
+export const corridorUnits = () => CORRIDOR_MI / getWorld().miPerUnit;
 
 function scatterAll(W: World) {
   placeScenery(W, CINDERCREST, { heightAt, gradientAt, trailQuery, snowCover, addCollider: (x, z, r) => addCollider(W, x, z, r) });

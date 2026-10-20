@@ -5,7 +5,7 @@
 // Pure data in, scatter lists + colliders out: no rendering here, so the headless sim uses it too.
 import { fbm, mulberry32, smoothstep } from './noise';
 import type { Recipe } from '../recipes';
-import { BOUNDARY_R, HALF, LAKE, TRAIL_HALF_WIDTH, TRAILHEAD_FT, TREELINE_H, type TrailHit, type World } from './world';
+import { BOUNDARY_R, HALF, LAKE, TRAIL_HALF_WIDTH, TRAILHEAD_FT, TREELINE_H, corridorUnits, trailFieldDistance, type TrailHit, type World } from './world';
 
 interface Tools {
   heightAt(x: number, z: number): number;
@@ -50,6 +50,7 @@ export function placeScenery(W: World, recipe: Recipe, T: Tools) {
     return { x: Math.sin(a) * rr, z: Math.cos(a) * rr };
   };
 
+  const R = corridorUnits();
   // ------------------------------------------------------------------------------ trees
   {
     const rand = mulberry32(1337);
@@ -72,6 +73,10 @@ export function placeScenery(W: World, recipe: Recipe, T: Tools) {
       const hit = T.trailQuery(x, z, S.thinTo);
       if (hit && hit.dist < S.trailClear) continue;
       if (hit) p *= S.thinFactor + (1 - S.thinFactor) * smoothstep(S.trailClear, S.thinTo, hit.dist);
+      // v0.8: the forest thickens toward the wilderness boundary, so the edge of the play area
+      // reads as dense timber rather than an invisible wall.
+      const dEdge = trailFieldDistance(x, z) - R;
+      if (dEdge > -25) p = Math.min(1, p * (1 + 0.9 * smoothstep(-25, 15, dEdge)));
       if (rand() > p) continue;
       if (slopeAt(x, z) > S.maxSlope || nearLake(x, z, 4) || nearTrailhead(x, z) || nearGem(x, z, 3)) continue;
       let r = rand() * total;
@@ -294,5 +299,28 @@ export function placeScenery(W: World, recipe: Recipe, T: Tools) {
       T.addCollider(best.x, best.z, 0.6);
       lastMark = main.s[i];
     }
+    // v0.8: two cairns mark the tarn spur so it reads as a trail from the junction.
+    const spur = W.lines[1];
+    if (spur)
+      for (const [f, side] of [[0.3, 1], [0.68, -1]] as const) {
+        const i = Math.min(spur.pts.length - 2, Math.floor(f * (spur.pts.length - 1)));
+        const a = spur.pts[i];
+        const b = spur.pts[i + 1];
+        const l = Math.hypot(b.x - a.x, b.z - a.z) || 1;
+        const d = side * (TRAIL_HALF_WIDTH + 1.4);
+        const x = a.x - ((b.z - a.z) / l) * d;
+        const z = a.z + ((b.x - a.x) / l) * d;
+        let y = Infinity;
+        for (const [ox, oz] of [[0.6, 0], [-0.6, 0], [0, 0.6], [0, -0.6], [0, 0]]) y = Math.min(y, T.heightAt(x + ox, z + oz));
+        const variant = Math.floor(rand() * C.settings.length);
+        W.cairns.push({ x, z, y: y - 0.06, s: 0.85 + rand() * 0.15, rot: rand() * Math.PI * 2, tint: rand(), item: `cairn${variant}` });
+        T.addCollider(x, z, 0.6);
+      }
   }
+
+  // v0.8: ground cover and small rocks only inside the play corridor (plus a margin) — nobody
+  // walks out there, and the distant view only shows the forest, cliffs and outcrops.
+  const SMALL = new Set(['talus', 'cinderRock', 'forestBoulder', 'meadowBoulder']);
+  W.cover = W.cover.filter((c) => trailFieldDistance(c.x, c.z) < R + 25);
+  W.rocks = W.rocks.filter((r) => !SMALL.has(r.item ?? '') || trailFieldDistance(r.x, r.z) < R + 50);
 }

@@ -4,6 +4,8 @@
 import { clamp, lerp, smoothstep } from './noise';
 import {
   BOUNDARY_R,
+  corridorUnits,
+  trailFieldDistance,
   LAKE,
   collidersNear,
   elevationFt,
@@ -52,6 +54,8 @@ export const TIME_SCALE = 50;
 /** Resting is a time-skip: the expedition clock runs this much faster while you sit. */
 export const REST_TIME_MULT = 4;
 
+/** Width (units) of the slow-down band just inside the wilderness boundary (v0.8). */
+const CORRIDOR_SOFT = 30;
 export const WALK_SPEED = 5.76; // v0.5: −10%
 export const JOG_SPEED = 11.16;
 export const JUMP_VELOCITY = 5.2;
@@ -348,14 +352,28 @@ export function stepPlayer(p: PlayerState, l: Loadout, intent: MoveIntent, dt: n
     nx = LAKE.x + ((nx - LAKE.x) / dl) * (LAKE.r - 6);
     nz = LAKE.z + ((nz - LAKE.z) / dl) * (LAKE.r - 6);
   }
-  // Wilderness boundary
-  const rr = Math.hypot(nx, nz);
-  if (rr > BOUNDARY_R) {
-    nx *= BOUNDARY_R / rr;
-    nz *= BOUNDARY_R / rr;
-    if (p.realTime - p.boundaryWarn > 4) {
-      p.boundaryWarn = p.realTime;
-      emit({ type: 'toast', text: 'Boundary · head back uphill', tone: 'warn' });
+  // Wilderness boundary (v0.8): a corridor along the trail. Moving further out gets slower over
+  // the last stretch, then stops; moving back toward the trail is never held back.
+  {
+    const R = corridorUnits();
+    const d1 = trailFieldDistance(nx, nz);
+    if (d1 > R - CORRIDOR_SOFT) {
+      const d0 = trailFieldDistance(p.x, p.z);
+      if (d1 > d0) {
+        const k = d1 >= R ? 0 : 1 - smoothstep(R - CORRIDOR_SOFT, R, d1) * 0.85;
+        nx = p.x + (nx - p.x) * k;
+        nz = p.z + (nz - p.z) * k;
+        if (d1 > R - CORRIDOR_SOFT * 0.5 && p.realTime - p.boundaryWarn > 4) {
+          p.boundaryWarn = p.realTime;
+          emit({ type: 'toast', text: 'Wilderness boundary · head back toward the trail', tone: 'warn' });
+        }
+      }
+    }
+    // Hard limit of the map itself.
+    const rr = Math.hypot(nx, nz);
+    if (rr > BOUNDARY_R) {
+      nx *= BOUNDARY_R / rr;
+      nz *= BOUNDARY_R / rr;
     }
   }
 

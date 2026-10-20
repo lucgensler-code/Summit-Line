@@ -50,11 +50,17 @@ export function getLandmarks(): Landmark[] {
   const rim = W.checkpoints.find((c) => c.id === 'rim')!;
   const iCamp = indexNear(camp.x, camp.z);
   const iRim = indexNear(rim.x, rim.z);
-  const lakeSide = Math.sign((LAKE.x - camp.x) * 1) || 1;
+  // Which side of the trail the tarn is on (offsetFromTrail's +side is along (−dz, dx)).
+  const ta = main.pts[Math.max(iCamp - 1, 0)];
+  const tb = main.pts[Math.min(iCamp + 1, main.pts.length - 1)];
+  const lakeSide = Math.sign(-(tb.z - ta.z) * (LAKE.x - camp.x) + (tb.x - ta.x) * (LAKE.z - camp.z)) || 1;
   const k = offsetFromTrail(5, 1, 5.5);
   const s1 = offsetFromTrail(3, -1, 3.4);
-  const c1 = offsetFromTrail(iCamp, -lakeSide, 3.4);
+  // v0.8: the tarn sign stands at the spur junction on the tarn's side, facing up-trail traffic;
+  // the register stays across the trail.
+  const c1 = offsetFromTrail(Math.max(iCamp - 3, 0), lakeSide, 3.4);
   const c2 = offsetFromTrail(iCamp + 4, -lakeSide, 3.6);
+  const spurMi = Math.max(0.1, unitsToMiles(W.lines[1]?.length ?? 40)).toFixed(1);
   const r1 = offsetFromTrail(iRim, -1, 3);
   cache = [
     {
@@ -76,8 +82,8 @@ export function getLandmarks(): Landmark[] {
       id: 'camp-sign',
       kind: 'sign',
       ...c1,
-      title: 'Obsidian Tarn Camp — alpine checkpoint',
-      text: `→ Obsidian Tarn: last reliable water. Filter here.\n↑ Summit ${mi(camp.s)} mi via the cinder switchbacks.`,
+      title: 'Obsidian Tarn ↗ — alpine checkpoint',
+      text: `↗ Obsidian Tarn ${spurMi} mi: last reliable water. Filter here.\n↑ Summit ${mi(camp.s)} mi via the cinder switchbacks.`,
     },
     {
       id: 'camp-register',
