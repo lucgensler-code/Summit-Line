@@ -82,8 +82,9 @@ export function PostFX() {
     c.addPass(bloom);
     c.addPass(new ShaderPass(GradeShader));
     c.addPass(new OutputPass());
-    c.addPass(new FXAAPass());
-    return { c, bloom };
+    const fxaa = new FXAAPass();
+    c.addPass(fxaa);
+    return { c, bloom, fxaa };
   }, [gl, scene, camera]);
   useEffect(() => {
     composer.c.setPixelRatio(viewport.dpr);
@@ -92,6 +93,7 @@ export function PostFX() {
   useEffect(() => () => composer.c.dispose(), [composer]);
   useFrame((_, dt) => {
     composer.bloom.enabled = debugFlags.bloom;
+    composer.fxaa.enabled = debugFlags.fxaa;
     if (quality.post) composer.c.render(dt);
     else gl.render(scene, camera);
   }, 1);

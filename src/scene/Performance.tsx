@@ -22,12 +22,15 @@ if (qParams?.has('lq')) {
  * glitch can be pinned down on the device itself. `dpr` 0 = leave it to the governor; `hold`
  * stops the governor from stepping quality down while testing.
  */
-export const debugFlags = { on: !!qParams?.has('debug'), bloom: true, shadows: true, dpr: 0, hold: false };
+export const debugFlags = { on: !!qParams?.has('debug'), bloom: true, fxaa: true, shadows: true, dpr: 0, hold: !!qParams?.has('strobetest'), freezeLod: false };
+/** `?strobetest` (v0.9): cycle one layer off at a time with a large label, to find a GPU glitch. */
+export const STROBE_TEST = !!qParams?.has('strobetest');
 
 /** Live numbers for the optional FPS overlay (F3 or ?fps). Written by the governor, read by the DOM. */
-export const perfStats = { fps: 0, p95: 0, calls: 0, tris: 0, dpr: 1, tier: 0, near: 0.2 };
+export const perfStats = { fps: 0, p95: 0, calls: 0, tris: 0, dpr: 1, tier: 0, near: 0.2, gpu: '' };
 
 const isTouch = () => window.matchMedia('(pointer: coarse)').matches;
+let autoDpr = 1;
 
 /**
  * Picks a sensible pixel ratio up front and steps quality DOWN (never back up, so it can't
@@ -47,7 +50,15 @@ export function PerfGovernor() {
     const dpr = Math.min(window.devicePixelRatio || 1, isTouch() ? 1.75 : 1.25);
     setDpr(dpr);
     perfStats.dpr = dpr;
-  }, [setDpr]);
+    autoDpr = dpr;
+    try {
+      const ctx = gl.getContext();
+      const ext = ctx.getExtension('WEBGL_debug_renderer_info');
+      perfStats.gpu = String(ext ? ctx.getParameter(ext.UNMASKED_RENDERER_WEBGL) : ctx.getParameter(ctx.RENDERER));
+    } catch {
+      perfStats.gpu = 'unknown';
+    }
+  }, [setDpr, gl]);
 
   const dbgDpr = useRef(0);
   useFrame(() => {
@@ -186,6 +197,8 @@ export function DebugPanel() {
     const boxes = [
       row('Post (glow + grade + FXAA)', () => quality.post, (v) => (quality.post = v)),
       row('Glow', () => debugFlags.bloom, (v) => (debugFlags.bloom = v)),
+      row('Edge smoothing (FXAA)', () => debugFlags.fxaa, (v) => (debugFlags.fxaa = v)),
+      row('Freeze tree swaps', () => debugFlags.freezeLod, (v) => (debugFlags.freezeLod = v)),
       row('Shadows', () => debugFlags.shadows, (v) => (debugFlags.shadows = v)),
       row('Valley mist', () => quality.mist, (v) => (quality.mist = v)),
       row('Hold quality (no auto steps)', () => debugFlags.hold, (v) => (debugFlags.hold = v)),
@@ -200,9 +213,9 @@ export function DebugPanel() {
     sel.onchange = () => (debugFlags.dpr = Number(sel.value));
     root.append(sel);
     const id = setInterval(() => {
-      stat.textContent = `${perfStats.fps.toFixed(0)} fps · p95 ${perfStats.p95.toFixed(1)} ms · ${perfStats.calls} draws · ${(perfStats.tris / 1000).toFixed(0)}k tris · dpr ${perfStats.dpr.toFixed(2)} · tier ${perfStats.tier} · near ${perfStats.near.toFixed(2)}`;
+      stat.textContent = `GPU: ${perfStats.gpu} · ${perfStats.fps.toFixed(0)} fps · p95 ${perfStats.p95.toFixed(1)} ms · ${perfStats.calls} draws · ${(perfStats.tris / 1000).toFixed(0)}k tris · dpr ${perfStats.dpr.toFixed(2)} · tier ${perfStats.tier} · near ${perfStats.near.toFixed(2)}`;
       boxes[0].checked = quality.post;
-      boxes[3].checked = quality.mist;
+      boxes[5].checked = quality.mist;
     }, 500);
     return () => {
       clearInterval(id);
@@ -210,4 +223,48 @@ export function DebugPanel() {
     };
   }, []);
   return debugFlags.on ? <div ref={el} className="debug-panel" onPointerDown={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()} /> : null;
+}
+
+/**
+ * `?strobetest`: steps through the layers one at a time (6 s each, repeating), each step switching
+ * ONE thing off, with a large label — walk around and note which label makes the glitch stop.
+ */
+export function StrobeTest() {
+  const el = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!STROBE_TEST) return;
+    const all = () => {
+      quality.post = quality.mist = quality.sway = true;
+      Object.assign(debugFlags, { bloom: true, fxaa: true, shadows: true, freezeLod: false, dpr: autoDpr });
+    };
+    const steps: [string, () => void][] = [
+      ['Everything ON (baseline)', () => {}],
+      ['Post-processing OFF (glow + grade + FXAA)', () => (quality.post = false)],
+      ['Glow OFF', () => (debugFlags.bloom = false)],
+      ['Edge smoothing (FXAA) OFF', () => (debugFlags.fxaa = false)],
+      ['Shadows OFF', () => (debugFlags.shadows = false)],
+      ['Valley mist OFF', () => (quality.mist = false)],
+      ['Wind sway OFF', () => (quality.sway = false)],
+      ['Render scale 1.0', () => (debugFlags.dpr = 1)],
+      ['Tree swaps FROZEN', () => (debugFlags.freezeLod = true)],
+    ];
+    let i = 0;
+    let t0 = performance.now();
+    const apply = () => {
+      all();
+      steps[i][1]();
+    };
+    apply();
+    const id = setInterval(() => {
+      const left = 6 - (performance.now() - t0) / 1000;
+      if (left <= 0) {
+        i = (i + 1) % steps.length;
+        t0 = performance.now();
+        apply();
+      }
+      if (el.current) el.current.textContent = `Strobe test ${i + 1}/${steps.length} · ${steps[i][0]} · next in ${Math.max(0, Math.ceil(left))} s`;
+    }, 200);
+    return () => clearInterval(id);
+  }, []);
+  return STROBE_TEST ? <div ref={el} className="strobe-test" /> : null;
 }

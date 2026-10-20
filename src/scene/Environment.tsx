@@ -251,6 +251,8 @@ export function Atmosphere() {
   const hemi = useRef<THREE.HemisphereLight>(null);
   const target = useMemo(() => new THREE.Object3D(), []);
   const dir = useMemo(() => new THREE.Vector3(), []);
+  // Direction the shadow map is rendered from; follows `dir` in small steps (see below).
+  const shadowDir = useMemo(() => new THREE.Vector3(0, 1, 0), []);
   const fog = useMemo(() => new THREE.Fog('#cfe0ec', 220, 3600), []);
   const focus = useMemo(() => new THREE.Vector3(), []);
 
@@ -285,8 +287,13 @@ export function Atmosphere() {
       s.intensity = pal.sunI;
       // v0.8: snap the shadow camera to whole shadow-map texels (in the light's own view), so
       // shadow edges stay put instead of crawling and shimmering as the climber moves.
-      snapToShadowTexels(focus, dir, (2 * 60) / 2048);
-      s.position.copy(focus).addScaledVector(dir, 160);
+      // v0.9: the sun moves continuously with the game clock, so a shadow map rendered from the
+      // exact sun angle every frame makes every shadow edge crawl and shimmer — a flickering
+      // outline on trees, rocks and grass even standing still. The shadow direction now steps
+      // (about every 0.6° of sun movement) and the map is texel-snapped, so edges hold still.
+      if (shadowDir.angleTo(dir) > 0.01 || useGame.getState().phase === 'prep') shadowDir.copy(dir);
+      snapToShadowTexels(focus, shadowDir, (2 * 60) / 2048);
+      s.position.copy(focus).addScaledVector(shadowDir, 160);
       target.position.copy(focus);
       s.castShadow = debugFlags.shadows;
       s.target = target;

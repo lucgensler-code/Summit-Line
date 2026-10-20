@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import { useGame, runtime } from './game/store';
 import { useDesktopControls } from './game/useControls';
 import { GameCanvas } from './scene/GameCanvas';
-import { DebugPanel, FpsOverlay } from './scene/Performance';
+import { DebugPanel, FpsOverlay, StrobeTest } from './scene/Performance';
 import { HUD } from './ui/HUD';
 import { PauseMenu } from './ui/PauseMenu';
 import { PrepScreen } from './ui/PrepScreen';
@@ -73,6 +73,7 @@ export function App() {
       {lbOpen && <Leaderboard />}
       <FpsOverlay />
       <DebugPanel />
+      <StrobeTest />
     </div>
   );
 }

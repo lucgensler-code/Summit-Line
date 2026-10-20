@@ -5,7 +5,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { cairnKitGeometry, isBentVariant, kitGeometry } from '../kit/catalogue';
 import { mulberry32 } from '../game/noise';
 import { useGame } from '../game/store';
-import { quality } from './Performance';
+import { debugFlags, quality } from './Performance';
 import { CINDERCREST } from '../recipes';
 import type { KitItem } from '../recipes/cindercrest';
 import { TRAIL_HALF_WIDTH, getWorld, heightAt, type Scatter } from '../game/world';
@@ -198,7 +198,7 @@ function Chunked({
   // fraction of a second instead of popping (the dither material is only used while fading).
   const state = useRef<{ of: unknown; lv: number[]; aNear: number[]; aFar: number[] }>({ of: null, lv: [], aNear: [], aFar: [] });
   useFrame(({ camera }, rawDt) => {
-    if (!lod) return;
+    if (!lod || debugFlags.freezeLod) return;
     const dt = Math.min(rawDt, 0.1);
     const pad = cell * 0.71;
     const st = state.current;
