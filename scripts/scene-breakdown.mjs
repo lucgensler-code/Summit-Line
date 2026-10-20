@@ -1,3 +1,4 @@
+// Visible triangles by mesh type in two trail views (dev server on :5173, ?lq). Usage: node scripts/scene-breakdown.mjs
 import { chromium } from 'playwright';
 const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome', args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
 const p = await b.newPage({ viewport: { width: 1280, height: 720 }, deviceScaleFactor: 1 });

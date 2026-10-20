@@ -1,3 +1,4 @@
+// Screenshot the scenery kit preview page (dev server on :5173). Usage: node scripts/kit-capture.mjs <out.png>
 import { chromium } from 'playwright';
 const out = process.argv[2];
 const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome', args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });

@@ -275,6 +275,43 @@ v0.6.1: gem positions are identical and ascent times are unchanged.
 - **Kit preview.** `npm run dev`, then open `/kit.html` to see every item, its variants and its
   settings, plus a glTF export and reload round trip.
 
+## v0.8 refinement pass
+
+Bug fixes, budget and visual quality. Gem positions and the main route are unchanged.
+
+- **Edge flicker (Chromebook).** Post-processing no longer multisamples its HDR target. MSAA
+  averaged dark edges with bright snow before tone mapping, which drew shimmering white
+  outlines. Edges are now smoothed with FXAA after tone mapping. Also:
+  - devices without half-float targets fall back to 8-bit
+  - the camera's near plane adapts to the view, for better depth precision at a distance
+  - the shadow camera snaps to shadow-map texels
+  - near/far scenery swaps wait until a chunk is clearly past the threshold
+- **`?debug`.** A panel to switch post-processing, glow, shadows, mist and render scale on the
+  device itself.
+- **Textures.** Runtime textures (wisps, mist, gem glow) are built from pixel arrays, not
+  canvas. Safari adds colour noise to canvas images, which showed as confetti in the clouds.
+  Particles are soft round dots.
+- **Play corridor.** You can roam 0.5 mi either side of the trail or the tarn spur. Moving
+  further out slows you, then stops you. The forest thickens at the edge, and ground cover is
+  only placed inside the corridor.
+- **Trees.** Tiers carry a star of branch tips. The species differ in shape and colour:
+  upturned Douglas fir, drooping yellow-green western hemlock, shaggy blue-grey mountain
+  hemlock, and narrow subalpine fir. A bent top appears on one hemlock variant only, with all
+  of them leaning downwind. The distance version follows the near outline, with no spike.
+- **Cairns** rest each stone on the real top of the one below, centred over the base. The
+  summit cairn is rebuilt from the kit, and the crater has no rocks.
+- **Rocks.** Stone colour, moss and lichen blend in soft patches. Cone rocks are warmer and
+  chunkier.
+- **Distant peaks.** Snow is decided per face: gullies hold snow and ribs stay bare. A
+  glaciated setting is available.
+- **Home and summit.**
+  - Home: no rocks on the cone, a cleaner snow cap, a full-width route profile, and the Start
+    button always in view.
+  - Summit: clearer air, and the time bar is red.
+- **Tarn.** The spur is straighter and marked with cairns, with a sign at the junction and a
+  viewpoint at the shore.
+- **Small touches.** The start camera is near eye level, and ground cover sways in the wind.
+
 ## Project layout
 
 ```
